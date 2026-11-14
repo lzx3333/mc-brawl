@@ -355,7 +355,7 @@ body.layout-editing .screen{z-index:20!important}
   <div class="logo">
     <div class="kicker">Minecraft · Item Brawl</div>
     <h1>物品<b>大乱斗</b></h1>
-    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v57 卡顿诊断增强</div>
+    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v58 直连自动重试</div>
   </div>
   <div class="menu-btns">
     <button class="btn primary" data-mode="1">单人挑战</button>
@@ -4161,6 +4161,10 @@ const Net = {
         this.lobby.slots[slot].weapon = d.weapon;
         this.lobby.slots[slot].ready = false;
         this.sendLobby();
+      } else if (d.t === 'wrtc-req') {
+        this._wrtcTries = 1;
+        this._lastWrtcTry = 0;
+        this.wrtcTry(conn, 'host', !!d.relay);
       } else if (d.t === 'resync') {
         try { this.sendSnap(); } catch (e) {}
       } else if (d.t === 'sync' && this.lobby && this.lobby.slots[slot]) {
@@ -4722,14 +4726,25 @@ const Net = {
       conn.emit('data', d);
     };
   },
-  async wrtcTry(conn, side) {
-    if (typeof RTCPeerConnection === 'undefined' || !conn || conn._pc) return;
+  async wrtcTry(conn, side, relayOnly) {
+    if (typeof RTCPeerConnection === 'undefined' || !conn) return;
+    // 已经建立或正在协商就别重复开
+    if (conn._wrtcState === 'on') return;
+    if (conn._wrtcState === 'try' && Date.now() - (conn._pcAt || 0) < 14000) return;
+    try { if (conn._pc) { conn._pc.close(); } } catch (e) {}
+    conn._pc = null;
     conn._wrtcState = 'try';
+    conn._pcAt = Date.now();
+    this._lastWrtcTry = Date.now();
+    this.wrtcStage = relayOnly ? 'relay' : 'offer';
     try {
-      const pc = new RTCPeerConnection(this.iceConfig());
+      const cfg = this.iceConfig();
+      if (relayOnly) cfg.iceTransportPolicy = 'relay';
+      const pc = new RTCPeerConnection(cfg);
       conn._pc = pc;
       pc.oniceconnectionstatechange = () => {
         const st = pc.iceConnectionState;
+        this.wrtcStage = 'ice-' + st;
         if (st === 'failed' || st === 'closed') { conn._wrtcState = 'off'; }
       };
       if (side === 'host') {
@@ -4737,22 +4752,53 @@ const Net = {
         this._wrtcAttach(conn, dc);
         await pc.setLocalDescription(await pc.createOffer());
         await this._waitIce(pc, 6000);
-        conn.send({ t: 'wrtc-o', sdp: pc.localDescription.sdp, turn: this.loadTurn() || null });
+        this.wrtcStage = 'offer-sent';
+        conn.send({ t: 'wrtc-o', sdp: pc.localDescription.sdp, turn: this.loadTurn() || null, relay: !!relayOnly });
       } else {
         pc.ondatachannel = (e) => this._wrtcAttach(conn, e.channel);
       }
-      setTimeout(() => { try { if (conn._wrtcState === 'try') { conn._wrtcState = 'off'; this.relaySay('直连没建立，继续用中转'); } } catch (e) {} }, 12000);
-    } catch (e) { conn._wrtcState = 'off'; }
+      setTimeout(() => {
+        try {
+          if (conn._wrtcState === 'try' || conn._wrtcState === 'off') {
+            conn._wrtcState = 'off';
+            if (!this.wrtcStage || this.wrtcStage.indexOf('ice-') !== 0) this.wrtcStage = 'timeout';
+          }
+        } catch (e) {}
+      }, 14000);
+    } catch (e) { conn._wrtcState = 'off'; this.wrtcStage = 'error'; }
   },
-  async _wrtcFromOffer(conn, sdp, turn) {
+  /* 直连失败就定时重试：房主发起，客人催一下 */
+  _wrtcRetry() {
+    if (!this._relayMode || this._direct || this._wrtcState === 'on') return;
+    if (typeof RTCPeerConnection === 'undefined') return;
+    const now = Date.now();
+    if (now - (this._lastWrtcTry || 0) < 15000) return;
+    const relayOnly = this._wrtcTries >= 1;
+    this._wrtcTries = (this._wrtcTries || 0) + 1;
+    if (this.role === 'host') {
+      const c = this.conns[0];
+      if (c) { this.relaySay(relayOnly ? '再试一次直连（走中转端口）…' : '再试一次直连…'); this.wrtcTry(c, 'host', relayOnly); }
+    } else if (this.role === 'guest') {
+      const c = this.conns[0];
+      if (c && c.open) { try { c.send({ t: 'wrtc-req', relay: relayOnly }); } catch (e) {} }
+      this._lastWrtcTry = now;
+    }
+  },
+  async _wrtcFromOffer(conn, sdp, turn, relayOnly) {
     if (typeof RTCPeerConnection === 'undefined') return;
     try {
       if (turn && turn.url && !this.loadTurn()) { this.saveTurn(turn.url, turn.user, turn.pass); this.relaySay('已自动采用房主的中转服务器'); }
     } catch (e) {}
     try {
-      const pc = new RTCPeerConnection(this.iceConfig());
+      const cfg = this.iceConfig();
+      if (relayOnly) cfg.iceTransportPolicy = 'relay';
+      const pc = new RTCPeerConnection(cfg);
       conn._pc = pc;
       conn._wrtcState = 'try';
+      conn._pcAt = Date.now();
+      this._lastWrtcTry = Date.now();
+      this._wrtcTries = relayOnly ? 2 : 1;
+      this.wrtcStage = 'answer';
       pc.ondatachannel = (e) => this._wrtcAttach(conn, e.channel);
       await pc.setRemoteDescription({ type: 'offer', sdp: sdp });
       await pc.setLocalDescription(await pc.createAnswer());
@@ -4974,7 +5020,7 @@ const Net = {
     } else if (this.role === 'guest') {
       this._gotHost = true;
       if (d._to && this.clientId && d._to !== this.clientId) return;
-      if (d.t === 'wrtc-o') { this._wrtcFromOffer(this.conns[0], d.sdp, d.turn); return; }
+      if (d.t === 'wrtc-o') { this._wrtcFromOffer(this.conns[0], d.sdp, d.turn, d.relay); return; }
       if (d.t === 'wrtc-a') return;
       this._onDataSafe(d);
     }
@@ -5021,6 +5067,7 @@ const Net = {
     this._hb = setInterval(() => {
       try {
         this.conns.forEach((c) => { try { if (c && c.open) c.send({ t: 'ping', ts: Date.now() }); } catch (e) {} });
+        if (this._relayMode) { try { this._wrtcRetry(); } catch (e) {} }
         if (this.role === 'guest' && this._relayMode && this.lobby && this._myIdxKnown) {
           const me = this.lobby.slots[this.myIdx];
           if (me && this.conns[0] && this.conns[0].open) {
@@ -6952,7 +6999,8 @@ function updateRttHud() {
   if (Net._lastErr) flag = ' · ERR';
   else if (Net.role === 'guest' && G.state === 'fight' && Net.lastSnapRecv && Date.now() - Net.lastSnapRecv > 2000) flag = ' · 等房主';
   const drop = Net._dropped ? ' · 丢' + Net._dropped : '';
-  el.textContent = (shown ? shown + 'ms' : '--ms') + ' · ' + kind + (fpsShow ? ' · ' + fpsShow + 'fps' : '') + ' · TURN' + (turnOk ? '✓' : '✗') + flag + drop;
+  const wst = (!Net._direct && Net.wrtcStage) ? ' · W:' + Net.wrtcStage : '';
+  el.textContent = (shown ? shown + 'ms' : '--ms') + ' · ' + kind + (fpsShow ? ' · ' + fpsShow + 'fps' : '') + ' · TURN' + (turnOk ? '✓' : '✗') + flag + drop + wst;
 }
 function loop(now) {
   let dt = (now - lastT) / 1000;
