@@ -303,6 +303,26 @@ body.layout-editing .screen{z-index:20!important}
 .diag-out{margin-top:8px;padding:8px;background:rgba(4,14,12,.9);border:1px solid rgba(120,200,180,.25);border-radius:4px;color:#cdeee2;font:600 11px/1.6 ui-monospace,monospace;white-space:pre-wrap;max-height:220px;overflow:auto}
 
 .err-bar{position:fixed;left:0;right:0;top:0;z-index:9999;background:#7a1f1f;color:#ffe9e9;padding:8px 12px;font:700 11px/1.5 ui-monospace,monospace;white-space:pre-wrap}
+
+/* 跨网中转联机 */
+.relay-title{margin:10px 0 6px;font:800 13px/1.4 system-ui,sans-serif;color:#9ff3d4;letter-spacing:.5px}
+.relay-title.small{font-size:12px;color:#8fd6c2}
+.relay-hint{font:600 11px/1.6 system-ui,sans-serif;color:#8ab5aa;margin-bottom:8px}
+.relay-code-box{margin-top:10px;padding:10px;background:rgba(10,40,34,.7);border:1px dashed rgba(120,220,190,.45);border-radius:6px;text-align:center}
+.relay-code-lbl{font:600 11px/1.2 system-ui,sans-serif;color:#8ab5aa;letter-spacing:2px}
+.relay-code{margin:4px 0 8px;font:800 30px/1.2 ui-monospace,monospace;letter-spacing:8px;color:#7ff7e8;text-shadow:0 0 12px rgba(127,247,232,.5)}
+.relay-join{display:flex;gap:8px;margin-top:10px}
+.relay-join input{flex:1;min-width:0;padding:10px;background:#081a16;color:#dffcf1;border:1px solid rgba(120,200,180,.3);border-radius:4px;font:700 15px/1 ui-monospace,monospace;text-transform:uppercase;letter-spacing:3px;text-align:center}
+.relay-join .btn{flex:0 0 auto;width:auto;margin:0;padding:10px 14px}
+/* 房间列表 / 匹配 */
+.relay-rooms-box{margin-top:8px;padding:8px;background:rgba(6,20,17,.85);border:1px solid rgba(120,200,180,.25);border-radius:6px;max-height:220px;overflow:auto}
+.relay-rooms-list{display:flex;flex-direction:column;gap:6px}
+.relay-room{display:flex;align-items:center;gap:8px;padding:9px 10px;background:rgba(20,60,50,.7);border:1px solid rgba(120,220,190,.3);border-radius:5px;font:700 12px/1.3 system-ui,sans-serif;color:#dffcf1;cursor:pointer}
+.relay-room:active{background:rgba(30,90,74,.8)}
+.relay-room .rr-mode{flex:1;color:#9ff3d4}
+.relay-room .rr-num{color:#8ab5aa;font-weight:600}
+.relay-room .rr-go{color:#7ff7e8;font-weight:800}
+.relay-room-empty{color:#8ab5aa;font:600 12px/1.6 system-ui,sans-serif;padding:4px 2px}
 </style>
 </head>
 <body class="one">
@@ -317,7 +337,7 @@ body.layout-editing .screen{z-index:20!important}
   <div class="logo">
     <div class="kicker">Minecraft · Item Brawl</div>
     <h1>物品<b>大乱斗</b></h1>
-    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v46 联机同步修复</div>
+    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v50 自动直连（TURN）</div>
   </div>
   <div class="menu-btns">
     <button class="btn primary" data-mode="1">单人挑战</button>
@@ -439,9 +459,11 @@ body.layout-editing .screen{z-index:20!important}
 <div id="netModal" class="modal hidden">
   <div class="panel net-panel">
     <h2>远程联机</h2>
-    <div class="net-tabs"><button id="netHostTab" class="on">创建房间</button><button id="netJoinTab">加入房间</button><button id="netManualTab">手动联机</button></div>
+    <div class="net-tabs"><button id="netManualTab" class="on">跨网联机</button><button id="netHostTab">创建房间</button><button id="netJoinTab">加入房间</button></div>
     <details id="netAdv" class="net-adv">
       <summary>网络增强：跨网联机（TURN，可选）</summary>
+      <input id="turnOne" placeholder="一行粘贴：turn:1.2.3.4:3478 用户名 密码" autocomplete="off">
+      <button id="turnOneFill" class="btn" style="width:100%;margin-top:6px">解析这行并填入下面三项</button>
       <input id="turnUrl" placeholder="turn:xxx.metered.live:443" autocomplete="off">
       <input id="turnUser" placeholder="TURN 用户名" autocomplete="off">
       <input id="turnPass" placeholder="TURN 密码" autocomplete="off">
@@ -449,13 +471,14 @@ body.layout-editing .screen{z-index:20!important}
       <button id="netDiag" class="btn" style="width:100%;margin-top:6px">联机自检（推荐先点这个）</button>
       <pre id="diagOut" class="diag-out hidden"></pre>
       <button id="turnSave" class="btn" style="width:100%;margin-top:6px">保存 TURN 配置</button>
-      <div id="turnStatus" class="net-status">不同网络（一个 WiFi 一个流量）连不上时，填一个 TURN 服务器即可中转。</div>
+      <div id="turnStatus" class="net-status">填了 TURN 后，联机时会自动尝试直连（经你的服务器中转），成功就自动切过去，失败自动回退。</div>
     </details>
-    <div id="netHostBox">
+    <div id="netHostBox" class="hidden">
       <div class="net-row">
         <label>回合时间 <select id="netTime"><option value="60">1 分钟</option><option value="120" selected>2 分钟</option><option value="180">3 分钟</option></select></label>
         <label>回合数 <select id="netRounds"><option value="1">1</option><option value="3" selected>3</option><option value="5">5</option></select></label>
       </div>
+      <div class="relay-hint">这里的房间码依赖 PeerJS 公共服务器，跨网（流量 / 不同 WiFi）经常连不上；跨网请用「跨网联机」。</div>
       <button id="netCreate" class="btn primary" style="width:100%">创建房间</button>
       <div id="netCode" class="net-code"></div>
       <div id="netHostStatus" class="net-status"></div>
@@ -471,9 +494,35 @@ body.layout-editing .screen{z-index:20!important}
       <div id="roomList" class="room-list"></div>
       <div id="netJoinStatus" class="net-status"></div>
     </div>
-    <div id="netManualBox" class="hidden">
-      <div class="net-status">不用任何服务器：房主生成「连接码」发给朋友 → 朋友把它粘进来生成「回复码」发回 → 房主粘贴回复码即可连上。
-      同一 WiFi 或跨网络都能用（跨网失败时配合上面的 TURN 中转）。</div>
+    <div id="netManualBox">
+      <div class="relay-title">跨网中转（推荐 · 4G/5G/不同 WiFi 都能连）</div>
+      <div class="relay-hint">两边各自连一个公共中转服务器，用「房间码」配对；不需要公网 IP，也不用互相粘贴连接码。</div>
+      <div class="net-row">
+        <label>房间类型 <select id="relayKind"><option value="1v1" selected>1v1</option><option value="ffa">混战</option><option value="2v2">阵营战 2v2</option></select></label>
+        <label>回合时间 <select id="relayTime"><option value="60">1 分钟</option><option value="120" selected>2 分钟</option><option value="180">3 分钟</option></select></label>
+      </div>
+      <button id="relayMatchBtn" class="btn gold" style="width:100%;margin-top:8px">⚡ 快速匹配（自动找人开局）</button>
+      <div class="relay-rooms">
+        <button id="relayRoomsBtn" class="btn" style="width:100%;margin-top:8px">房间列表（看谁在等人）</button>
+        <div id="relayRoomsBox" class="relay-rooms-box hidden">
+          <div id="relayRoomsList" class="relay-rooms-list">正在搜索…</div>
+        </div>
+      </div>
+      <button id="relayHostBtn" class="btn primary" style="width:100%">创建中转房间（我是房主）</button>
+      <div id="relayCodeBox" class="relay-code-box hidden">
+        <div class="relay-code-lbl">房间码</div>
+        <div id="relayCode" class="relay-code">-----</div>
+        <button id="relayCopy" class="btn" style="width:100%;margin-top:6px">复制房间码</button>
+      </div>
+      <div class="relay-join">
+        <input id="relayCodeIn" maxlength="5" placeholder="朋友的房间码" autocomplete="off" spellcheck="false">
+        <button id="relayJoinBtn" class="btn gold">加入房间</button>
+      </div>
+      <div id="relayStatus" class="net-status"></div>
+      <div class="man-sep"></div>
+      <div class="relay-title small">直连（不经过服务器，只适合同一个 WiFi）</div>
+      <div class="net-status">房主生成「连接码」发给朋友 → 朋友把它粘进来生成「回复码」发回 → 房主粘贴回复码即可连上。
+      两边都是流量（不同运营商）时通常连不上，那种情况请用上面的中转。</div>
       <div class="net-row">
         <label>房间类型 <select id="manKind"><option value="1v1" selected>1v1</option><option value="ffa">混战（最多 3 人）</option><option value="2v2">阵营战 2v2</option></select></label>
         <label>回合时间 <select id="manTime"><option value="60">1 分钟</option><option value="120" selected>2 分钟</option><option value="180">3 分钟</option></select></label>
@@ -3841,6 +3890,125 @@ if (Array.isArray(window.EXTRA_ITEMS)) {
   window.EXTRA_ITEMS.forEach(function (it) { addItem(it); });
 }
 
+/* ---------------- 跨网中转：MQTT over WebSocket ---------------- */
+/* 不依赖 NAT/公网 IP：两边都主动连一个公共 MQTT 服务器，靠主题收发。
+   房间码就是主题名，房主订阅 /g、朋友订阅 /h，消息走 QoS0（游戏状态，丢一帧无所谓）。 */
+const Relay = {
+  BROKERS: ['wss://broker-cn.emqx.io:8084/mqtt', 'wss://broker.emqx.io:8084/mqtt'],
+  ws: null, connected: false, broker: '', buf: [], _pid: 1, _ping: null,
+  onmsg: null, onclose: null,
+  _str(s) {
+    const u = new TextEncoder().encode(s);
+    const o = [u.length >> 8, u.length & 255];
+    for (let i = 0; i < u.length; i++) o.push(u[i]);
+    return o;
+  },
+  _raw(s) {
+    const u = new TextEncoder().encode(s);
+    const o = [];
+    for (let i = 0; i < u.length; i++) o.push(u[i]);
+    return o;
+  },
+  _len(n) {
+    const out = [];
+    do { let b = n % 128; n = Math.floor(n / 128); if (n > 0) b |= 128; out.push(b); } while (n > 0);
+    return out;
+  },
+  _pkt(type, flags, body) {
+    const h = [(type << 4) | flags].concat(this._len(body.length));
+    const out = new Uint8Array(h.length + body.length);
+    out.set(h, 0);
+    out.set(body, h.length);
+    return out;
+  },
+  _parse() {
+    for (;;) {
+      if (this.buf.length < 2) return;
+      let mult = 1, len = 0, i = 1, b;
+      do {
+        if (i >= this.buf.length) return;
+        b = this.buf[i++];
+        len += (b & 127) * mult;
+        mult *= 128;
+      } while (b & 128);
+      if (this.buf.length < i + len) return;
+      const type = this.buf[0] >> 4;
+      const body = this.buf.slice(i, i + len);
+      this.buf = this.buf.slice(i + len);
+      if (type === 3) {
+        const tl = (body[0] << 8) | body[1];
+        const topic = new TextDecoder().decode(new Uint8Array(body.slice(2, 2 + tl)));
+        const payload = new TextDecoder().decode(new Uint8Array(body.slice(2 + tl)));
+        if (this.onmsg) { try { this.onmsg(topic, payload); } catch (e) {} }
+      }
+    }
+  },
+  _open(url) {
+    return new Promise((res, rej) => {
+      let done = false;
+      const fin = (e) => { if (done) return; done = true; clearTimeout(to); if (e) rej(e); else res(true); };
+      const to = setTimeout(() => fin(new Error('超时')), 9000);
+      let ws;
+      try { ws = new WebSocket(url, ['mqtt']); } catch (e) { fin(e); return; }
+      this.ws = ws;
+      this.buf = [];
+      this.connected = false;
+      ws.binaryType = 'arraybuffer';
+      ws.onopen = () => {
+        const cid = 'mcb' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        ws.send(this._pkt(1, 0, [].concat(this._str('MQTT'), [4, 2], [0, 45], this._str(cid))));
+      };
+      ws.onerror = () => fin(new Error('连接失败'));
+      ws.onclose = () => {
+        const was = this.connected;
+        this.connected = false;
+        fin(new Error('已断开'));
+        if (was && this.onclose) { try { this.onclose(); } catch (e) {} }
+      };
+      ws.onmessage = (ev) => {
+        const d = new Uint8Array(ev.data);
+        for (let i = 0; i < d.length; i++) this.buf.push(d[i]);
+        if (!this.connected && this.buf.length >= 4 && (this.buf[0] >> 4) === 2) {
+          const rl = this.buf[1] & 127;
+          this.buf = this.buf.slice(2 + rl);
+          this.connected = true;
+          this._startPing();
+          fin();
+          return;
+        }
+        this._parse();
+      };
+    });
+  },
+  async connect() {
+    let last = null;
+    for (const url of this.BROKERS) {
+      try {
+        await this._open(url);
+        this.broker = url;
+        return true;
+      } catch (e) { last = e; }
+    }
+    throw last || new Error('中转服务器连不上');
+  },
+  _startPing() {
+    this.stopPing();
+    if (typeof setInterval !== 'function') return;
+    this._ping = setInterval(() => { try { this.ws.send(this._pkt(12, 0, [])); } catch (e) {} }, 25000);
+  },
+  stopPing() { try { if (this._ping) clearInterval(this._ping); } catch (e) {} this._ping = null; },
+  sub(topic) {
+    const id = this._pid++ & 0xffff;
+    this.ws.send(this._pkt(8, 2, [id >> 8, id & 255].concat(this._str(topic), [0])));
+  },
+  pub(topic, payload, retain) {
+    if (!this.ws || this.ws.readyState !== 1) return false;
+    const body = this._str(topic).concat(this._raw(payload));
+    try { this.ws.send(this._pkt(3, retain ? 1 : 0, body)); return true; } catch (e) { return false; }
+  },
+  close() { this.stopPing(); try { if (this.ws) this.ws.close(); } catch (e) {} this.ws = null; this.connected = false; }
+};
+
 /* ---------------- remote 1v1 (WebRTC / PeerJS) ---------------- */
 const Net = {
   role: null, peer: null, conns: [], ffa: false, myIdx: 1, remoteCtrls: [], code: '',
@@ -3928,12 +4096,20 @@ const Net = {
   hostConn(conn) {
     const max = this.kind === '2v2' ? 3 : (this.ffa ? 2 : 1);
     if (this.conns.length >= max) { try { conn.close(); } catch (e) {} return; }
-    const idx = 1 + this.conns.length;
+    const idx = conn._slot || (1 + this.conns.length);
     conn.slot = idx;
     this.conns.push(conn);
     this.remoteCtrls[idx] = { mx: 0, my: 0, attack: false, skill: false };
     const onOpen = () => {
       this.startHeartbeat();
+      if (this._relayMode) this.wrtcTry(conn, 'host');
+      if (this._pooling) {
+        this._pooling = false;
+        try { if (this._poolT) clearTimeout(this._poolT); } catch (e) {}
+        this._matchBtnReset();
+        this.relaySay('匹配成功：对手已经进房间了');
+        if (typeof Lobby !== 'undefined') { Lobby.open(this); Lobby.notice('匹配成功，等他选好武器、准备好就能开始'); }
+      }
       this.status('玩家已连接（' + this.conns.length + '）');
       if (this._manualMode && typeof Lobby !== 'undefined') Lobby.open(this);
       if (this.lobby) {
@@ -3952,6 +4128,7 @@ const Net = {
       this.lastRecv = Date.now();
       if (d.t === 'ping') { try { conn.send({ t: 'pong' }); } catch (e) {} return; }
       if (d.t === 'pong') { return; }
+      if (d.t === 'hello') { this.sendLobby(); return; }
       if (d.t === 'input') {
         this.remoteCtrls[slot] = {
           mx: clamp(+d.mx || 0, -1, 1), my: clamp(+d.my || 0, -1, 1),
@@ -3962,6 +4139,12 @@ const Net = {
         this.lobby.slots[slot].weapon = d.weapon;
         this.lobby.slots[slot].ready = false;
         this.sendLobby();
+      } else if (d.t === 'sync' && this.lobby && this.lobby.slots[slot]) {
+        const sl2 = this.lobby.slots[slot];
+        let ch = false;
+        if (d.weapon && d.weapon !== sl2.weapon) { sl2.weapon = d.weapon; ch = true; }
+        if (!!d.ready !== !!sl2.ready) { sl2.ready = !!d.ready; ch = true; }
+        if (ch) this.sendLobby();
       } else if (d.t === 'ready' && this.lobby && this.lobby.slots[slot]) {
         this.lobby.slots[slot].ready = !!d.ready;
         this.sendLobby();
@@ -4048,6 +4231,7 @@ const Net = {
     else if (d.t === 'lobby') {
       this.lobby = d.lobby;
       this.myIdx = d.you || 1;
+      this._myIdxKnown = true;
       if (typeof Lobby !== 'undefined') {
         const lb = document.getElementById('lobby');
         const visible = lb && !lb.classList.contains('hidden') && Lobby.net === this;
@@ -4112,13 +4296,21 @@ const Net = {
     if (!conn || !conn.open || !this.lobby || !this.lobby.slots[this.myIdx]) return;
     this.lobby.slots[this.myIdx].weapon = weapon;
     this.lobby.slots[this.myIdx].ready = false;
+    this._myWeapon = weapon; this._myReady = false;
+    if (this._relayMode) { setTimeout(() => this._relayEcho(), 700); setTimeout(() => this._relayEcho(), 1800); }
     try { conn.send({ t: 'pick', weapon: weapon }); } catch (e) {}
     if (typeof Lobby !== 'undefined') Lobby.render();
+  },
+  _relayEcho() {
+    if (!this._relayMode || this.role !== 'guest' || !this.conns[0] || !this.conns[0].open) return;
+    try { this.conns[0].send({ t: 'sync', weapon: this._myWeapon || null, ready: !!this._myReady }); } catch (e) {}
   },
   guestReady(ready) {
     const conn = this.conns[0];
     if (!conn || !conn.open || !this.lobby || !this.lobby.slots[this.myIdx]) return;
     this.lobby.slots[this.myIdx].ready = !!ready;
+    this._myReady = !!ready;
+    if (this._relayMode) { setTimeout(() => this._relayEcho(), 700); setTimeout(() => this._relayEcho(), 1800); }
     try { conn.send({ t: 'ready', ready: !!ready }); } catch (e) {}
     if (typeof Lobby !== 'undefined') Lobby.render();
   },
@@ -4332,7 +4524,7 @@ const Net = {
       open: false, slot: 0, _h: {},
       on(ev, fn) { (this._h[ev] = this._h[ev] || []).push(fn); },
       emit(ev, a) { (this._h[ev] || []).forEach((fn) => { try { fn(a); } catch (e) {} }); },
-      send(o) { try { if (dc.readyState === 'open') dc.send(JSON.stringify(o)); } catch (e) {} },
+      send(o) { try { if (dc.readyState !== 'open') return; dc.send(typeof o === 'string' ? o : JSON.stringify(o)); } catch (e) {} },
       close() { try { dc.close(); } catch (e) {} }
     };
     dc.onopen = () => { conn.open = true; conn.emit('open'); };
@@ -4426,6 +4618,341 @@ const Net = {
     this._man = []; this._manPending = null;
     this.disconnect(false);
   },
+  /* ---------- 跨网中转（MQTT 房间码，不依赖 NAT） ---------- */
+  relaySay(msg) {
+    this.status(msg);
+    const el = document.getElementById('relayStatus');
+    if (el) el.textContent = msg;
+  },
+  _relayBaseFor(code) { return 'mcbrawl/v3/' + String(code || '').toUpperCase(); },
+  _relayPub(str) { if (this._relayTopicOut) Relay.pub(this._relayTopicOut, str); },
+  _relayConn(side, slot) {
+    const self = this;
+    const conn = {
+      open: true, slot: slot || 0, _h: {},
+      on(ev, fn) { (this._h[ev] = this._h[ev] || []).push(fn); },
+      emit(ev, a) { (this._h[ev] || []).forEach((fn) => { try { fn(a); } catch (e) {} }); },
+      send(o) {
+        let d = o;
+        if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { return; } }
+        if (!d || typeof d !== 'object') return;
+        if (side === 'host') { d._t = conn.slot; d._to = conn._cid || ''; } else { d._c = self.clientId; }
+        const txt = JSON.stringify(d);
+        if (conn._dc && conn._dc.readyState === 'open') {
+          try { conn._dc.send(txt); return; } catch (e) { conn._dc = null; }
+        }
+        self._relayPub(txt);
+      },
+      close() { conn.open = false; conn.emit('close'); }
+    };
+    return conn;
+  },
+  /* ---------- WebRTC 直连：信令走 MQTT，数据走 P2P/TURN ---------- */
+  _wrtcAttach(conn, dc) {
+    const self = this;
+    dc.onopen = () => {
+      conn._dc = dc;
+      if (conn._wrtcState !== 'on') {
+        conn._wrtcState = 'on';
+        this.relaySay('已切到直连通道（低延迟）');
+        if (typeof Lobby !== 'undefined') { try { Lobby.notice('直连已建立，操作会更跟手'); } catch (e) {} }
+      }
+    };
+    dc.onclose = () => { conn._dc = null; conn._wrtcState = 'off'; this.relaySay('直连断了，自动切回中转'); };
+    dc.onmessage = (e) => {
+      let d = e.data;
+      if (typeof d === 'string') { try { d = JSON.parse(d); } catch (err) { return; } }
+      if (!d) return;
+      self.lastRecv = Date.now();
+      conn.emit('data', d);
+    };
+  },
+  async wrtcTry(conn, side) {
+    if (typeof RTCPeerConnection === 'undefined' || !conn || conn._pc) return;
+    conn._wrtcState = 'try';
+    try {
+      const pc = new RTCPeerConnection(this.iceConfig());
+      conn._pc = pc;
+      pc.oniceconnectionstatechange = () => {
+        const st = pc.iceConnectionState;
+        if (st === 'failed' || st === 'closed') { conn._wrtcState = 'off'; }
+      };
+      if (side === 'host') {
+        const dc = pc.createDataChannel('mcbrawl', { ordered: true });
+        this._wrtcAttach(conn, dc);
+        await pc.setLocalDescription(await pc.createOffer());
+        await this._waitIce(pc, 6000);
+        conn.send({ t: 'wrtc-o', sdp: pc.localDescription.sdp, turn: this.loadTurn() || null });
+      } else {
+        pc.ondatachannel = (e) => this._wrtcAttach(conn, e.channel);
+      }
+      setTimeout(() => { try { if (conn._wrtcState === 'try') { conn._wrtcState = 'off'; this.relaySay('直连没建立，继续用中转'); } } catch (e) {} }, 12000);
+    } catch (e) { conn._wrtcState = 'off'; }
+  },
+  async _wrtcFromOffer(conn, sdp, turn) {
+    if (typeof RTCPeerConnection === 'undefined') return;
+    try {
+      if (turn && turn.url && !this.loadTurn()) { this.saveTurn(turn.url, turn.user, turn.pass); this.relaySay('已自动采用房主的中转服务器'); }
+    } catch (e) {}
+    try {
+      const pc = new RTCPeerConnection(this.iceConfig());
+      conn._pc = pc;
+      conn._wrtcState = 'try';
+      pc.ondatachannel = (e) => this._wrtcAttach(conn, e.channel);
+      await pc.setRemoteDescription({ type: 'offer', sdp: sdp });
+      await pc.setLocalDescription(await pc.createAnswer());
+      await this._waitIce(pc, 6000);
+      conn.send({ t: 'wrtc-a', sdp: pc.localDescription.sdp });
+    } catch (e) { conn._wrtcState = 'off'; this.relaySay('直连协商失败，继续用中转'); }
+  },
+  /* ---------- 自动匹配 / 房间列表（都建立在同一个中转连接上） ---------- */
+  _relayWire() {
+    const self = this;
+    Relay.onmsg = (t, p) => self._relayDispatch(t, p);
+    Relay.onclose = () => self._relayAuto();
+  },
+  async _relayConn2() {
+    if (Relay.connected) { this._relayWire(); return true; }
+    await Relay.connect();
+    this._relayWire();
+    return true;
+  },
+  _relayDispatch(t, p) {
+    if (this._relayTopicIn && t === this._relayTopicIn) { this._relayIn(p); return; }
+    if (this._poolTopic && t === this._poolTopic) { this._poolIn(p); return; }
+    if (this._listTopic && t.indexOf(this._listTopic + '/') === 0) { this._listIn(t, p); return; }
+  },
+  /* 把房间挂到公共房间列表（MQTT 保留消息），别人打开列表立刻能看到 */
+  _roomAnnounce() {
+    this._stopRoomAnnounce();
+    if (typeof setInterval !== 'function') return;
+    const self = this;
+    const info = () => {
+      if (!self._relayMode || self.role !== 'host' || !self.code) return;
+      const max = self.kind === '2v2' ? 4 : (self.kind === 'ffa' ? 3 : 2);
+      Relay.pub('mcbrawl/v4/rooms/' + self.code, JSON.stringify({
+        code: self.code, kind: self.kind, n: 1 + self.conns.length, max: max, ts: Date.now()
+      }), true);
+    };
+    info();
+    this._annT = setInterval(info, 5000);
+  },
+  _stopRoomAnnounce() {
+    try { if (this._annT) clearInterval(this._annT); } catch (e) {}
+    this._annT = null;
+    try { if (Relay.connected && this.code && this.role === 'host') Relay.pub('mcbrawl/v4/rooms/' + this.code, '', true); } catch (e) {}
+  },
+  _relayHostCore(kind, time, rounds, code) {
+    this._hostSetup(time, rounds, kind === '2v2' ? '2v2' : (kind === 'ffa' ? 'ffa' : false));
+    if (code) this.code = code;
+    this._manualMode = false;
+    this._relayMode = true;
+    this._pooling = false;
+    this._relayBase = this._relayBaseFor(this.code);
+    this._relayTopicOut = this._relayBase + '/h';
+    this._relayTopicIn = this._relayBase + '/g';
+    Relay.sub(this._relayTopicIn);
+    this._listTopic = 'mcbrawl/v4/rooms';
+    this._roomAnnounce();
+  },
+  async relayHost(kind, time, rounds) {
+    if (typeof WebSocket === 'undefined') { this.relaySay('当前浏览器不支持中转联机'); return false; }
+    this.disconnect(false);
+    this.relaySay('正在连接中转服务器…（首次约 3 秒）');
+    try { await this._relayConn2(); } catch (e) { this.relaySay('中转服务器连不上：' + e.message); this._relayMode = false; return false; }
+    this._relayHostCore(kind, time, rounds);
+    const rc = document.getElementById('relayCode');
+    if (rc) rc.textContent = this.code;
+    const box = document.getElementById('relayCodeBox');
+    if (box) box.classList.remove('hidden');
+    const c = document.getElementById('netCode');
+    if (c) c.textContent = this.code;
+    this.relaySay('房间码 ' + this.code + '：发给朋友，或让他点「房间列表」直接看到你的房间');
+    if (typeof Lobby !== 'undefined') {
+      Lobby.open(this);
+      Lobby.notice('把房间码 ' + this.code + ' 发给朋友，他在「跨网联机」里输入就能进');
+    }
+    return true;
+  },
+  /* ---------- 一键匹配 ---------- */
+  async quickMatch(kind, time) {
+    if (typeof WebSocket === 'undefined') { this.relaySay('当前浏览器不支持中转联机'); return false; }
+    this.disconnect(false);
+    this.relaySay('正在连接匹配服务器…');
+    try { await this._relayConn2(); } catch (e) { this.relaySay('连不上服务器：' + e.message); return false; }
+    const code = this.newCode();
+    this._relayHostCore(kind, time, 3, code);
+    this.myCid = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    this._pooling = true;
+    this._poolKind = kind;
+    this._poolTime = time;
+    this._poolTopic = 'mcbrawl/v4/pool/' + kind;
+    Relay.sub(this._poolTopic);
+    this.relaySay('正在匹配对手…（同类型的人会自动配到一起）');
+    const self = this;
+    let n = 0;
+    const ask = () => {
+      if (!self._pooling) return;
+      if (n++ > 24) {
+        self._pooling = false;
+        self._matchBtnReset();
+        self.relaySay('暂时没匹配到人：可以点「房间列表」看谁在等人，或者用房间码');
+        return;
+      }
+      Relay.pub(self._poolTopic, JSON.stringify({ t: 'q', cid: self.myCid, code: code, kind: kind, ts: Date.now() }));
+      self._poolT = setTimeout(ask, 1200);
+    };
+    ask();
+    return true;
+  },
+  _poolIn(p) {
+    if (!this._pooling) return;
+    let d = null;
+    try { d = JSON.parse(p); } catch (e) { return; }
+    if (!d || d.t !== 'q' || !d.cid || d.cid === this.myCid) return;
+    if (d.kind !== this._poolKind) return;
+    this._poolT2 = (this._poolT2 || 0) + 1;
+    if (String(d.cid) < String(this.myCid)) {
+      // 对方的编号更小 → 我去加他，双方不会抢着建房
+      this._pooling = false;
+      try { clearTimeout(this._poolT); } catch (e) {}
+      this._stopRoomAnnounce();
+      this._relayJoinCore(d.code);
+      this._matchBtnReset();
+      this.relaySay('匹配到了！正在进入对方的房间…');
+      if (typeof Lobby !== 'undefined') { Lobby.open(this); Lobby.notice('匹配成功，正在等房主开始'); }
+    }
+  },
+  _matchBtnReset() {
+    const b = document.getElementById('relayMatchBtn');
+    if (b) { b.textContent = '⚡ 快速匹配（自动找人开局）'; b.disabled = false; }
+  },
+  cancelMatch() {
+    this._pooling = false;
+    try { if (this._poolT) clearTimeout(this._poolT); } catch (e) {}
+    this._poolT = null;
+  },
+  /* ---------- 房间列表 ---------- */
+  async browseRooms(cb) {
+    if (typeof WebSocket === 'undefined') return;
+    try { await this._relayConn2(); } catch (e) { this.relaySay('连不上服务器：' + e.message); return; }
+    this._listTopic = 'mcbrawl/v4/rooms';
+    this._rooms = {};
+    this._roomCb = cb;
+    Relay.sub('mcbrawl/v4/rooms/#');
+    this.relaySay('正在搜索房间…');
+    const self = this;
+    if (this._roomT) { try { clearInterval(this._roomT); } catch (e) {} }
+    let rounds = 0;
+    const flush = () => {
+      const now = Date.now();
+      const list = Object.keys(self._rooms || {}).map((k) => self._rooms[k])
+        .filter((r) => r && r.code && now - (r.ts || 0) < 20000 && r.n < r.max && !(self.role === 'host' && r.code === self.code));
+      list.sort((a, b) => (b.n - a.n) || ((a.ts || 0) - (b.ts || 0)));
+      if (self._roomCb) self._roomCb(list);
+    };
+    setTimeout(flush, 1000);
+    this._roomT = setInterval(() => {
+      flush();
+      if (++rounds > 20) { try { clearInterval(self._roomT); } catch (e) {} self._roomT = null; }
+    }, 1000);
+  },
+  _listIn(t, p) {
+    const code = t.slice(t.lastIndexOf('/') + 1);
+    if (!this._rooms) this._rooms = {};
+    if (!p) { delete this._rooms[code]; return; }
+    try { this._rooms[code] = JSON.parse(p); } catch (e) {}
+  },
+  /* 客人：直接用已有连接进房（不重新连服务器） */
+  _relayJoinCore(cd) {
+    this.role = 'guest'; this.conns = []; this.remoteCtrls = [];
+    this.lobby = null;
+    this.code = cd;
+    this._manualMode = false;
+    this._relayMode = true;
+    this._gotHost = false;
+    this._myIdxKnown = false;
+    this.clientId = 'c' + Math.random().toString(36).slice(2, 9);
+    this._relayBase = this._relayBaseFor(cd);
+    this._relayTopicOut = this._relayBase + '/g';
+    this._relayTopicIn = this._relayBase + '/h';
+    Relay.sub(this._relayTopicIn);
+    const conn = this._relayConn('guest');
+    this.conns = [conn];
+    this.startHeartbeat();
+    this.relaySay('正在找房主…');
+    this._relayHello();
+  },
+  async relayJoin(code) {
+    const cd = String(code || '').trim().toUpperCase();
+    if (!cd) { this.relaySay('请输入朋友给的房间码'); return false; }
+    if (typeof WebSocket === 'undefined') { this.relaySay('当前浏览器不支持中转联机'); return false; }
+    this.disconnect(false);
+    this.relaySay('正在连接中转服务器…（首次约 3 秒）');
+    try { await this._relayConn2(); } catch (e) { this.relaySay('中转服务器连不上：' + e.message); this._relayMode = false; return false; }
+    this._relayJoinCore(cd);
+    return true;
+  },
+  _relayIn(p) {
+    let d = null;
+    try { d = JSON.parse(p); } catch (e) { return; }
+    if (!d || typeof d !== 'object') return;
+    this.lastRecv = Date.now();
+    if (this.role === 'host') {
+      let conn = d._c ? this.conns.filter((c) => c._cid && c._cid === d._c)[0] : this.conns[0];
+      if (!conn) {
+        conn = this._relayConn('host', 0);
+        conn._cid = d._c || ('anon' + Date.now());
+        this.hostConn(conn);
+      }
+      if (d._t && d._t !== conn.slot) return;
+      if (d.t === 'wrtc-a') {
+        try { if (conn._pc) conn._pc.setRemoteDescription({ type: 'answer', sdp: d.sdp }); } catch (e) {}
+        return;
+      }
+      conn.emit('data', d);
+    } else if (this.role === 'guest') {
+      this._gotHost = true;
+      if (d._to && this.clientId && d._to !== this.clientId) return;
+      if (d.t === 'wrtc-o') { this._wrtcFromOffer(this.conns[0], d.sdp, d.turn); return; }
+      if (d.t === 'wrtc-a') return;
+      this.onData(d);
+    }
+  },
+  _relayHello() {
+    const self = this;
+    let n = 0;
+    const hello = () => {
+      if (!self._relayMode || self.role !== 'guest' || self._gotHost) return;
+      if (n++ > 15) { self.relaySay('没找到房主：确认房间码没输错、房主还开着房间'); return; }
+      self._relayPub(JSON.stringify({ t: 'hello', _c: self.clientId }));
+      self._helloT = setTimeout(hello, 900);
+    };
+    hello();
+  },
+  async _relayAuto() {
+    if (!this._relayMode || !this._relayBase) return;
+    this._relayTry = (this._relayTry || 0) + 1;
+    if (this._relayTry > 10) { this.relaySay('中转连接已断开，请重新创建/加入房间'); return; }
+    this.relaySay('中转断线，正在重连（第 ' + this._relayTry + ' 次）…');
+    const self = this;
+    try {
+      await Relay.connect();
+      if (!this._relayMode) return;
+      this._relayWire();
+      Relay.sub(this._relayTopicIn);
+      if (this._poolTopic && this._pooling) Relay.sub(this._poolTopic);
+      this._relayTry = 0;
+      if (this.role === 'host') this._roomAnnounce();
+      this.relaySay('中转已重连');
+      if (this.role === 'guest') {
+        this._gotHost = false;
+        this._relayHello();
+      }
+    } catch (e) {
+      this._helloT = setTimeout(() => self._relayAuto(), 2500);
+    }
+  },
   startHeartbeat() {
     if (this._hb) return;
     this.lastRecv = Date.now();
@@ -4434,6 +4961,12 @@ const Net = {
     this._hb = setInterval(() => {
       try {
         this.conns.forEach((c) => { try { if (c && c.open) c.send({ t: 'ping' }); } catch (e) {} });
+        if (this.role === 'guest' && this._relayMode && this.lobby && this._myIdxKnown) {
+          const me = this.lobby.slots[this.myIdx];
+          if (me && this.conns[0] && this.conns[0].open) {
+            try { this.conns[0].send({ t: 'sync', weapon: this._myWeapon || null, ready: !!this._myReady }); } catch (e) {}
+          }
+        }
         const gap = Date.now() - (this.lastRecv || 0);
         const bad = gap > 6000;
         if (bad && !this._hbWarn) {
@@ -4451,10 +4984,15 @@ const Net = {
   },
   stopHeartbeat() { try { if (this._hb && typeof clearInterval === 'function') clearInterval(this._hb); } catch (e) {} this._hb = null; },
   disconnect(show) {
+    try { this._stopRoomAnnounce(); } catch (e) {}
+    try { this.cancelMatch(); } catch (e) {}
     try { this.conns.forEach((c) => c.close()); } catch (e) {}
     try { if (this.peer) this.peer.destroy(); } catch (e) {}
     try { (this._man || []).forEach((x) => { try { x.pc.close(); } catch (e) {} }); } catch (e) {}
     this._man = []; this._manPending = null;
+    try { if (this._helloT && typeof clearTimeout === 'function') clearTimeout(this._helloT); } catch (e) {}
+    try { Relay.onclose = null; Relay.onmsg = null; if (this._relayMode) Relay.close(); } catch (e) {}
+    this._helloT = null; this._gotHost = false; this._relayMode = false;
     this.conns = []; this.peer = null; this.role = null; this.ffa = false; this.remoteCtrls = [];
     this._manualMode = false;
     this.stopHeartbeat();
@@ -6518,6 +7056,94 @@ function bindUI() {
   });
   if (netHostTab) netHostTab.addEventListener('click', function () { netTab(netHostTab); });
   if (netJoinTab) netJoinTab.addEventListener('click', function () { netTab(netJoinTab); });
+  /* 跨网中转联机 */
+  const relayHostBtn = document.getElementById('relayHostBtn');
+  const relayCodeBox = document.getElementById('relayCodeBox');
+  const relayCodeEl = document.getElementById('relayCode');
+  const relayCodeIn = document.getElementById('relayCodeIn');
+  const relayJoinBtn = document.getElementById('relayJoinBtn');
+  const relayCopy = document.getElementById('relayCopy');
+  const relayStatus = document.getElementById('relayStatus');
+  function relaySay(t) { if (relayStatus) relayStatus.textContent = t; }
+  if (relayCodeIn) relayCodeIn.addEventListener('input', function () {
+    relayCodeIn.value = relayCodeIn.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+  });
+  if (relayHostBtn) relayHostBtn.addEventListener('click', async function () {
+    Sound.init();
+    const k = document.getElementById('relayKind');
+    const t = document.getElementById('relayTime');
+    relayHostBtn.disabled = true;
+    try {
+      const ok = await Net.relayHost(k ? k.value : '1v1', t ? t.value : 120, 3);
+      if (ok) {
+        if (relayCodeEl && Net.code) relayCodeEl.textContent = Net.code;
+        if (relayCodeBox) relayCodeBox.classList.remove('hidden');
+        relaySay('房间码 ' + Net.code + '：发给朋友，让他输入这个房间码');
+      }
+    } catch (e) { relaySay('建房失败：' + e.message); }
+    relayHostBtn.disabled = false;
+  });
+  if (relayJoinBtn) relayJoinBtn.addEventListener('click', async function () {
+    Sound.init();
+    const v = relayCodeIn ? relayCodeIn.value.trim() : '';
+    if (!v || v.length < 4) { relaySay('请输入朋友给的房间码'); return; }
+    relayJoinBtn.disabled = true;
+    relaySay('正在连接中转服务器…');
+    try { await Net.relayJoin(v); } catch (e) { relaySay('加入失败：' + e.message); }
+    relayJoinBtn.disabled = false;
+  });
+  const relayMatchBtn = document.getElementById('relayMatchBtn');
+  const relayRoomsBtn = document.getElementById('relayRoomsBtn');
+  const relayRoomsBox = document.getElementById('relayRoomsBox');
+  const relayRoomsList = document.getElementById('relayRoomsList');
+  function roomName(k) { return k === 'ffa' ? '混战' : (k === '2v2' ? '2v2 阵营战' : '1v1'); }
+  function renderRooms(list) {
+    if (!relayRoomsList) return;
+    if (!list || !list.length) { relayRoomsList.innerHTML = '<div class="relay-room-empty">现在没有空房间：点「快速匹配」等人，或者自己建一个</div>'; return; }
+    relayRoomsList.innerHTML = list.map(function (r) {
+      return '<div class="relay-room" data-code="' + r.code + '"><span class="rr-mode">' + roomName(r.kind) + '</span><span class="rr-num">' + r.n + '/' + r.max + ' 人</span><span class="rr-go">加入</span></div>';
+    }).join('');
+  }
+  function clearMyRoom() {
+    try { if (Net && Net.role === 'host' && Net._relayMode) Net._stopRoomAnnounce(); } catch (e) {}
+  }
+  window.addEventListener('pagehide', clearMyRoom);
+  window.addEventListener('beforeunload', clearMyRoom);
+  if (relayMatchBtn) relayMatchBtn.addEventListener('click', async function () {
+    Sound.init();
+    if (Net._pooling) {
+      Net.cancelMatch();
+      relayMatchBtn.textContent = '⚡ 快速匹配（自动找人开局）';
+      relaySay('已取消匹配');
+      return;
+    }
+    const k = document.getElementById('relayKind');
+    const t = document.getElementById('relayTime');
+    relayMatchBtn.textContent = '匹配中…（点一下取消）';
+    relayMatchBtn.disabled = true;
+    try {
+      const ok = await Net.quickMatch(k ? k.value : '1v1', t ? t.value : 120);
+      if (!ok) relayMatchBtn.textContent = '⚡ 快速匹配（自动找人开局）';
+    } catch (e) { relaySay('匹配失败：' + e.message); relayMatchBtn.textContent = '⚡ 快速匹配（自动找人开局）'; }
+    relayMatchBtn.disabled = false;
+  });
+  if (relayRoomsBtn) relayRoomsBtn.addEventListener('click', async function () {
+    Sound.init();
+    if (relayRoomsBox) relayRoomsBox.classList.toggle('hidden');
+    if (relayRoomsBox && relayRoomsBox.classList.contains('hidden')) return;
+    await Net.browseRooms(renderRooms);
+  });
+  if (relayRoomsList) relayRoomsList.addEventListener('click', function (e) {
+    const el = e.target && e.target.closest ? e.target.closest('.relay-room') : null;
+    if (!el) return;
+    const code = el.getAttribute('data-code');
+    if (!code) return;
+    Sound.init();
+    Net.relayJoin(code);
+  });
+  if (relayCopy) relayCopy.addEventListener('click', function () {
+    Lobby.copyText(Net.code || '', function (ok) { relaySay(ok ? '已复制房间码：' + Net.code : '复制失败，让朋友手输房间码'); });
+  });
   const manHostGen = document.getElementById('manHostGen');
   const manHostCode = document.getElementById('manHostCode');
   const manHostCopy = document.getElementById('manHostCopy');
@@ -6664,6 +7290,24 @@ function bindUI() {
     try {
       await Net.selfTest(function (lines) { if (out) out.textContent = lines.join('\n'); });
     } catch (e) { if (out) out.textContent = '自检失败：' + e.message; }
+  });
+  const turnOne = document.getElementById('turnOne');
+  const turnOneFill = document.getElementById('turnOneFill');
+  if (turnOneFill) turnOneFill.addEventListener('click', function () {
+    const raw = ((turnOne && turnOne.value) || '').trim();
+    const st = document.getElementById('turnStatus');
+    if (!raw) { if (st) st.textContent = '先把那行配置粘进来'; return; }
+    const parts = raw.split(/s+/).filter(Boolean);
+    let u = parts[0] || '';
+    if (u && !/^(turn|turns|stun):/i.test(u)) u = 'turn:' + u;
+    const n = parts[1] || '';
+    const p = parts[2] || '';
+    if (turnUrl) turnUrl.value = u;
+    if (turnUser) turnUser.value = n;
+    if (turnPass) turnPass.value = p;
+    Net.saveTurn(u, n, p);
+    if (st) st.textContent = '已填入并保存：' + u + (n ? '（账号 ' + n + '）' : '');
+    Sound.play('click', { vol: 0.4, rate: 1.1 });
   });
   const turnSave = document.getElementById('turnSave');
   if (turnSave) turnSave.addEventListener('click', function () {
