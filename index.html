@@ -279,8 +279,8 @@ body.layout-editing .screen{z-index:20!important}
 .lobby-card.on{border-color:var(--gold);background:rgba(255,207,92,.08)}
 .lobby-card img{width:30px;height:30px;image-rendering:pixelated}
 .lobby-card span{font:800 9px/1.2 "Noto Sans SC",sans-serif;color:#cfe9de;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.lobby-actions{display:flex;gap:8px;margin-top:2px}
-.lobby-actions .btn{flex:1;padding:10px 8px;font-size:13px}
+.lobby-actions{display:flex;gap:6px;margin-top:2px;flex-wrap:wrap}
+.lobby-actions .btn{flex:1 1 auto;min-width:calc(50% - 6px);padding:10px 6px;font-size:12.5px;white-space:nowrap}
 .lobby-actions .btn:disabled{opacity:.4}
 .lobby-status{font:700 11px/1.6 "Noto Sans SC",sans-serif;color:#79a595;text-align:center;min-height:18px}
 @media (min-aspect-ratio:1.3){.lobby-cards{grid-template-columns:repeat(10,minmax(0,1fr))}.lobby-slots{grid-template-columns:repeat(4,minmax(0,1fr))}}
@@ -355,7 +355,7 @@ body.layout-editing .screen{z-index:20!important}
   <div class="logo">
     <div class="kicker">Minecraft · Item Brawl</div>
     <h1>物品<b>大乱斗</b></h1>
-    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v55 联机界面简化</div>
+    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v56 修复客人画面卡死</div>
   </div>
   <div class="menu-btns">
     <button class="btn primary" data-mode="1">单人挑战</button>
@@ -4926,6 +4926,9 @@ const Net = {
     Relay.sub(this._relayTopicIn);
     const conn = this._relayConn('guest');
     this.conns = [conn];
+    // 数据通道收到的消息要喂给游戏逻辑（之前漏了，导致客人画面不动）
+    conn.on('data', (d) => { this.lastRecv = Date.now(); this.onData(d); });
+    conn.on('close', () => this.relaySay('和房主的连接断了'));
     this.startHeartbeat();
     this.relaySay('正在找房主…');
     this._relayHello();
