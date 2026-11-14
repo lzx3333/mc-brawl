@@ -326,6 +326,20 @@ body.layout-editing .screen{z-index:20!important}
 
 /* 联机延迟指示 */
 .net-rtt{position:fixed;top:8px;right:10px;z-index:60;padding:3px 8px;border-radius:4px;background:rgba(4,20,16,.72);color:#9ff3d4;font:700 11px/1.4 ui-monospace,monospace;letter-spacing:.5px;pointer-events:none}
+/* 联机面板简化 */
+.net-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.net-head h2{margin:0;font-size:17px}
+.net-x{width:38px;height:38px;flex:0 0 auto;border-radius:50%;border:1px solid rgba(120,200,180,.35);background:rgba(10,30,26,.9);color:#9ff3d4;font:700 17px/1 system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
+.net-x:active{background:rgba(30,70,60,.95)}
+.net-big{width:100%;padding:15px 0;font-size:17px;font-weight:800;letter-spacing:1px}
+.net-two{display:flex;gap:8px;margin-top:8px}
+.net-two .btn{flex:1;width:auto;margin:0}
+.net-adv-sec{margin:14px 0 8px;font:700 12px/1.4 system-ui,sans-serif;color:#8fd6c2;letter-spacing:.5px}
+
+/* 联机面板可滚动 */
+.net-panel{max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.net-panel::-webkit-scrollbar{width:4px}
+.net-panel::-webkit-scrollbar-thumb{background:rgba(120,200,180,.35);border-radius:2px}
 </style>
 </head>
 <body class="one">
@@ -341,7 +355,7 @@ body.layout-editing .screen{z-index:20!important}
   <div class="logo">
     <div class="kicker">Minecraft · Item Brawl</div>
     <h1>物品<b>大乱斗</b></h1>
-    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v53 联机诊断</div>
+    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v55 联机界面简化</div>
   </div>
   <div class="menu-btns">
     <button class="btn primary" data-mode="1">单人挑战</button>
@@ -462,86 +476,75 @@ body.layout-editing .screen{z-index:20!important}
 <div id="errBar" class="err-bar hidden"></div>
 <div id="netModal" class="modal hidden">
   <div class="panel net-panel">
-    <h2>远程联机</h2>
-    <div class="net-tabs"><button id="netManualTab" class="on">跨网联机</button><button id="netHostTab">创建房间</button><button id="netJoinTab">加入房间</button></div>
-    <details id="netAdv" class="net-adv">
-      <summary>网络增强：跨网联机（TURN，可选）</summary>
-      <input id="turnOne" placeholder="一行粘贴：turn:1.2.3.4:3478 用户名 密码" autocomplete="off">
-      <button id="turnOneFill" class="btn" style="width:100%;margin-top:6px">解析这行并填入下面三项</button>
-      <input id="turnUrl" placeholder="turn:xxx.metered.live:443" autocomplete="off">
-      <input id="turnUser" placeholder="TURN 用户名" autocomplete="off">
-      <input id="turnPass" placeholder="TURN 密码" autocomplete="off">
-      <button id="turnFree" class="btn" style="width:100%;margin-top:6px">一键填入公共免费 TURN（Open Relay）</button>
-      <button id="netDiag" class="btn" style="width:100%;margin-top:6px">联机自检（推荐先点这个）</button>
-      <pre id="diagOut" class="diag-out hidden"></pre>
-      <button id="turnSave" class="btn" style="width:100%;margin-top:6px">保存 TURN 配置</button>
-      <div id="turnStatus" class="net-status">填了 TURN 后，联机时会自动尝试直连（经你的服务器中转），成功就自动切过去，失败自动回退。</div>
-    </details>
-    <div id="netHostBox" class="hidden">
-      <div class="net-row">
-        <label>回合时间 <select id="netTime"><option value="60">1 分钟</option><option value="120" selected>2 分钟</option><option value="180">3 分钟</option></select></label>
-        <label>回合数 <select id="netRounds"><option value="1">1</option><option value="3" selected>3</option><option value="5">5</option></select></label>
-      </div>
-      <div class="relay-hint">这里的房间码依赖 PeerJS 公共服务器，跨网（流量 / 不同 WiFi）经常连不上；跨网请用「跨网联机」。</div>
-      <button id="netCreate" class="btn primary" style="width:100%">创建房间</button>
-      <div id="netCode" class="net-code"></div>
-      <div id="netHostStatus" class="net-status"></div>
-      <button id="netGo" class="btn gold hidden" style="width:100%;margin-top:8px">去选武器</button>
-      <button id="netCreateFFA" class="btn gold" style="width:100%;margin-top:8px">创建混战房间（最多 3 人）</button>
-      <button id="netCreate2v2" class="btn gold" style="width:100%;margin-top:8px">创建阵营战 2v2 房间</button>
+    <div class="net-head">
+      <h2>联机对战</h2>
+      <button id="netCloseX" class="net-x" aria-label="关闭">✕</button>
     </div>
-    <div id="netJoinBox" class="hidden">
-      <input id="netJoinCode" maxlength="5" placeholder="输入 5 位房间码" autocomplete="off">
-      <button id="netJoin" class="btn primary" style="width:100%;margin-top:8px">加入房间</button>
-      <button id="netScan" class="btn hidden" style="width:100%;margin-top:8px">搜索附近房间</button>
-      <div class="net-status">房间码联机依赖 PeerJS 公共服务器，连不上时请用上方「手动联机」。</div>
-      <div id="roomList" class="room-list"></div>
-      <div id="netJoinStatus" class="net-status"></div>
-    </div>
+
     <div id="netManualBox">
-      <div class="relay-title">跨网中转（推荐 · 4G/5G/不同 WiFi 都能连）</div>
-      <div class="relay-hint">两边各自连一个公共中转服务器，用「房间码」配对；不需要公网 IP，也不用互相粘贴连接码。</div>
-      <div class="net-row">
-        <label>房间类型 <select id="relayKind"><option value="1v1" selected>1v1</option><option value="ffa">混战</option><option value="2v2">阵营战 2v2</option></select></label>
-        <label>回合时间 <select id="relayTime"><option value="60">1 分钟</option><option value="120" selected>2 分钟</option><option value="180">3 分钟</option></select></label>
+      <button id="relayMatchBtn" class="btn primary net-big">⚡ 快速匹配</button>
+      <div class="net-two">
+        <button id="relayHostBtn" class="btn gold">创建房间</button>
+        <button id="relayRoomsBtn" class="btn">房间列表</button>
       </div>
-      <button id="relayMatchBtn" class="btn gold" style="width:100%;margin-top:8px">⚡ 快速匹配（自动找人开局）</button>
-      <div class="relay-rooms">
-        <button id="relayRoomsBtn" class="btn" style="width:100%;margin-top:8px">房间列表（看谁在等人）</button>
-        <div id="relayRoomsBox" class="relay-rooms-box hidden">
-          <div id="relayRoomsList" class="relay-rooms-list">正在搜索…</div>
-        </div>
+      <div class="relay-join">
+        <input id="relayCodeIn" maxlength="5" placeholder="房间码" autocomplete="off" spellcheck="false">
+        <button id="relayJoinBtn" class="btn">加入</button>
       </div>
-      <button id="relayHostBtn" class="btn primary" style="width:100%">创建中转房间（我是房主）</button>
+      <div id="relayStatus" class="net-status"></div>
       <div id="relayCodeBox" class="relay-code-box hidden">
         <div class="relay-code-lbl">房间码</div>
         <div id="relayCode" class="relay-code">-----</div>
         <button id="relayCopy" class="btn" style="width:100%;margin-top:6px">复制房间码</button>
       </div>
-      <div class="relay-join">
-        <input id="relayCodeIn" maxlength="5" placeholder="朋友的房间码" autocomplete="off" spellcheck="false">
-        <button id="relayJoinBtn" class="btn gold">加入房间</button>
+      <div id="relayRoomsBox" class="relay-rooms-box hidden">
+        <div id="relayRoomsList" class="relay-rooms-list">正在搜索…</div>
       </div>
-      <div id="relayStatus" class="net-status"></div>
-      <div class="man-sep"></div>
-      <div class="relay-title small">直连（不经过服务器，只适合同一个 WiFi）</div>
-      <div class="net-status">房主生成「连接码」发给朋友 → 朋友把它粘进来生成「回复码」发回 → 房主粘贴回复码即可连上。
-      两边都是流量（不同运营商）时通常连不上，那种情况请用上面的中转。</div>
       <div class="net-row">
-        <label>房间类型 <select id="manKind"><option value="1v1" selected>1v1</option><option value="ffa">混战（最多 3 人）</option><option value="2v2">阵营战 2v2</option></select></label>
-        <label>回合时间 <select id="manTime"><option value="60">1 分钟</option><option value="120" selected>2 分钟</option><option value="180">3 分钟</option></select></label>
+        <label>类型 <select id="relayKind"><option value="1v1" selected>1v1</option><option value="ffa">混战</option><option value="2v2">2v2</option></select></label>
+        <label>时长 <select id="relayTime"><option value="60">1 分钟</option><option value="120" selected>2 分钟</option><option value="180">3 分钟</option></select></label>
       </div>
-      <button id="manHostGen" class="btn primary" style="width:100%">① 我是房主：生成连接码</button>
-      <textarea id="manHostCode" class="man-code hidden" readonly spellcheck="false"></textarea>
-      <button id="manHostCopy" class="btn hidden" style="width:100%;margin-top:6px">复制连接码</button>
-      <textarea id="manAnswerIn" class="man-code hidden" spellcheck="false" placeholder="② 把朋友发回来的「回复码」粘贴到这里"></textarea>
-      <button id="manHostFinish" class="btn gold hidden" style="width:100%;margin-top:6px">② 完成连接</button>
-      <div class="man-sep"></div>
-      <textarea id="manJoinIn" class="man-code" spellcheck="false" placeholder="把房主发来的「连接码」粘贴到这里"></textarea>
-      <button id="manJoinGen" class="btn primary" style="width:100%;margin-top:6px">我是朋友：生成回复码</button>
-      <textarea id="manJoinOut" class="man-code hidden" readonly spellcheck="false"></textarea>
-      <button id="manJoinCopy" class="btn hidden" style="width:100%;margin-top:6px">复制回复码</button>
-      <div id="manStatus" class="net-status"></div>
+
+      <details id="netAdv" class="net-adv">
+        <summary>高级设置</summary>
+
+        <div class="net-adv-sec">中转服务器（已内置，通常不用管）</div>
+        <input id="turnOne" placeholder="一行粘贴：turn:IP:3478 用户名 密码" autocomplete="off">
+        <button id="turnOneFill" class="btn" style="width:100%;margin-top:6px">解析并填入</button>
+        <input id="turnUrl" placeholder="turn:1.2.3.4:3478" autocomplete="off">
+        <input id="turnUser" placeholder="用户名" autocomplete="off">
+        <input id="turnPass" placeholder="密码" autocomplete="off">
+        <button id="turnSave" class="btn" style="width:100%;margin-top:6px">保存</button>
+        <button id="netDiag" class="btn" style="width:100%;margin-top:6px">联机自检</button>
+        <pre id="diagOut" class="diag-out hidden"></pre>
+        <div id="turnStatus" class="net-status">直连失败时会经这台服务器中转。</div>
+
+        <div class="net-adv-sec">备用：手动直连（同 WiFi 用，需互相粘贴连接码）</div>
+        <div class="net-row">
+          <label>类型 <select id="manKind"><option value="1v1" selected>1v1</option><option value="ffa">混战</option><option value="2v2">2v2</option></select></label>
+          <label>时长 <select id="manTime"><option value="60">1 分钟</option><option value="120" selected>2 分钟</option><option value="180">3 分钟</option></select></label>
+        </div>
+        <button id="manHostGen" class="btn primary" style="width:100%">我是房主：生成连接码</button>
+        <textarea id="manHostCode" class="man-code hidden" readonly spellcheck="false"></textarea>
+        <button id="manHostCopy" class="btn hidden" style="width:100%;margin-top:6px">复制连接码</button>
+        <textarea id="manAnswerIn" class="man-code hidden" spellcheck="false" placeholder="把朋友的回复码粘到这里"></textarea>
+        <button id="manHostFinish" class="btn gold hidden" style="width:100%;margin-top:6px">完成连接</button>
+        <div class="man-sep"></div>
+        <textarea id="manJoinIn" class="man-code" spellcheck="false" placeholder="把房主的连接码粘到这里"></textarea>
+        <button id="manJoinGen" class="btn primary" style="width:100%;margin-top:6px">我是朋友：生成回复码</button>
+        <textarea id="manJoinOut" class="man-code hidden" readonly spellcheck="false"></textarea>
+        <button id="manJoinCopy" class="btn hidden" style="width:100%;margin-top:6px">复制回复码</button>
+        <div id="manStatus" class="net-status"></div>
+      </details>
+    </div>
+
+    <div id="netHostBox" class="hidden">
+      <div id="netCode" class="net-code"></div>
+      <div id="netHostStatus" class="net-status"></div>
+    </div>
+    <div id="netJoinBox" class="hidden">
+      <div id="netJoinStatus" class="net-status"></div>
+      <div id="roomList" class="room-list"></div>
     </div>
     <button id="netClose" class="btn" style="width:100%;margin-top:12px">关闭</button>
   </div>
@@ -4668,11 +4671,33 @@ const Net = {
     return conn;
   },
   /* ---------- WebRTC 直连：信令走 MQTT，数据走 P2P/TURN ---------- */
+  _wrtcStats(pc) {
+    if (!pc || typeof pc.getStats !== 'function') return;
+    const self = this;
+    const run = () => {
+      pc.getStats().then((rep) => {
+        let best = null;
+        rep.forEach((r) => {
+          if (r.type === 'candidate-pair' && r.currentRoundTripTime != null && (r.nominated || r.state === 'succeeded')) {
+            if (!best || r.currentRoundTripTime < best.currentRoundTripTime) best = r;
+          }
+        });
+        if (best) {
+          const lc = rep.get(best.localCandidateId), rc = rep.get(best.remoteCandidateId);
+          self.wrtcRtt = Math.round(best.currentRoundTripTime * 1000);
+          self.wrtcKind = (lc && lc.candidateType ? lc.candidateType : '?') + '/' + (rc && rc.candidateType ? rc.candidateType : '?');
+        }
+      }).catch(() => {});
+    };
+    run();
+    if (typeof setInterval === 'function') this._statsT = setInterval(run, 2000);
+  },
   _wrtcAttach(conn, dc) {
     const self = this;
     dc.onopen = () => {
       conn._dc = dc;
       this._direct = true;
+      try { this._wrtcStats(conn._pc); } catch (e) {}
       if (conn._wrtcState !== 'on') {
         conn._wrtcState = 'on';
         this.relaySay('已切到直连通道（低延迟）');
@@ -6892,6 +6917,12 @@ function updateTouchUI() {
 /* ---------- loop ---------- */
 let lastT = performance.now();
 let acc = 0;
+let fpsAcc = 0, fpsCnt = 0, fpsShow = 0, fpsLast = 0;
+function updateFps(now) {
+  if (!fpsLast) { fpsLast = now; return; }
+  fpsAcc += now - fpsLast; fpsLast = now; fpsCnt++;
+  if (fpsAcc > 600) { fpsShow = Math.round(fpsCnt * 1000 / fpsAcc); fpsAcc = 0; fpsCnt = 0; }
+}
 function updateRttHud() {
   const el = document.getElementById('netRtt');
   if (!el) return;
@@ -6900,7 +6931,9 @@ function updateRttHud() {
   if (!on) return;
   let turnOk = false;
   try { const t = Net.loadTurn(); turnOk = !!(t && t.url); } catch (e) {}
-  el.textContent = (Net.rtt ? Net.rtt + 'ms' : '--ms') + ' · ' + (Net._direct ? '直连' : '中转') + ' · TURN' + (turnOk ? '✓' : '✗');
+  const shown = (Net._direct && Net.wrtcRtt) ? Net.wrtcRtt : Net.rtt;
+  const kind = Net._direct ? ('直连' + (Net.wrtcKind ? '(' + Net.wrtcKind + ')' : '')) : '中转';
+  el.textContent = (shown ? shown + 'ms' : '--ms') + ' · ' + kind + (fpsShow ? ' · ' + fpsShow + 'fps' : '') + ' · TURN' + (turnOk ? '✓' : '✗');
 }
 function loop(now) {
   let dt = (now - lastT) / 1000;
@@ -6914,6 +6947,7 @@ function loop(now) {
     }
     Key.pressed.clear();
     try { render(); } catch (e) { console.error('render error', e); }
+    updateFps(now);
     updateRttHud();
     requestAnimationFrame(loop);
     return;
@@ -6926,6 +6960,7 @@ function loop(now) {
   }
   Key.pressed.clear();
   try { render(); } catch (e) { console.error('render error', e); }
+  updateFps(now);
   updateRttHud();
   if (Net.role === 'host' && Net.conns.length && G.state === 'fight' && now - Net.lastSnap > (Net._direct ? 45 : 80)) {
     Net.lastSnap = now;
@@ -7056,6 +7091,15 @@ function bindUI() {
     const st = document.getElementById('manStatus');
     if (st) st.textContent = '点①为新朋友生成连接码，收齐回复码后逐个提交';
   };
+  function closeNetModal() {
+    const m = document.getElementById('netModal');
+    if (m) m.classList.add('hidden');
+    try { if (Net._pooling) Net.cancelMatch(); } catch (e) {}
+  }
+  const netCloseX = document.getElementById('netCloseX');
+  if (netCloseX) netCloseX.addEventListener('click', function () { Sound.init(); closeNetModal(); });
+  const netModalEl = document.getElementById('netModal');
+  if (netModalEl) netModalEl.addEventListener('click', function (e) { if (e.target === netModalEl) closeNetModal(); });
   const netClose = document.getElementById('netClose');
   if (netClose) netClose.addEventListener('click', function () {
     document.getElementById('netModal').classList.add('hidden');
