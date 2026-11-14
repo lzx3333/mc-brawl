@@ -317,7 +317,7 @@ body.layout-editing .screen{z-index:20!important}
   <div class="logo">
     <div class="kicker">Minecraft · Item Brawl</div>
     <h1>物品<b>大乱斗</b></h1>
-    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v43 错误可见</div>
+    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v44 串码修复</div>
   </div>
   <div class="menu-btns">
     <button class="btn primary" data-mode="1">单人挑战</button>
@@ -4359,22 +4359,38 @@ const Net = {
     if (this.role !== 'host') return '';
     const pc = new RTCPeerConnection(this.iceConfig());
     const dc = pc.createDataChannel('mcbrawl', { ordered: true });
+    const oid = 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     this._man = this._man || [];
-    this._man.push({ pc: pc, dc: dc });
-    this._manPending = { pc: pc, dc: dc };
+    this._man.push({ pc: pc, dc: dc, id: oid });
+    this._manPending = { pc: pc, dc: dc, id: oid };
     this._manConn(dc, 'host');
     await pc.setLocalDescription(await pc.createOffer());
     await this._waitIce(pc, 4500);
-    return await this._pack({ t: 'offer', sdp: pc.localDescription.sdp, kind: this.kind });
+    const sdp = pc.localDescription.sdp;
+    // 把 offer 的 m 行数记下来，方便排查串码
+    this._lastOfferM = (sdp.match(/^m=/gm) || []).length;
+    return await this._pack({ t: 'offer', sdp: sdp, kind: this.kind, id: oid });
   },
   async manualAccept(codeStr) {
-    const pend = this._manPending;
-    if (!pend) return false;
     const info = await this._unpack(codeStr);
-    if (!info || !info.sdp) return false;
-    await pend.pc.setRemoteDescription({ type: 'answer', sdp: info.sdp });
-    this.status('回复码已提交，等待连接…');
-    return true;
+    if (!info || !info.sdp) throw new Error('回复码内容不完整');
+    const list = (this._man || []).filter((x) => x.pc && x.dc);
+    if (!list.length) throw new Error('还没有生成连接码，请先点①');
+    // 优先用码里带的 id 找对应那次 offer；找不到就逐个试（防止复制了旧码）
+    const order = [];
+    const hit = list.filter((x) => info.id && x.id === info.id)[0];
+    if (hit) order.push(hit);
+    list.slice().reverse().forEach((x) => { if (x !== hit) order.push(x); });
+    let lastErr = null;
+    for (const it of order) {
+      try {
+        await it.pc.setRemoteDescription({ type: 'answer', sdp: info.sdp });
+        this._manPending = { pc: it.pc, dc: it.dc, id: it.id };
+        this.status('回复码已提交，等待连接…');
+        return true;
+      } catch (e) { lastErr = e; }
+    }
+    throw new Error('回复码和当前连接码对不上（offer m=' + (this._lastOfferM || '?') + '，本条 id=' + (info.id || '无') + '，本机 id=' + list.map(function(x){return x.id;}).join(',') + '）：' + (lastErr && lastErr.message ? lastErr.message : '未知'));
   },
   async manualAnswer(codeStr) {
     if (!this.manualSupported()) throw new Error('浏览器不支持');
@@ -4391,7 +4407,7 @@ const Net = {
     await pc.setRemoteDescription({ type: 'offer', sdp: info.sdp });
     await pc.setLocalDescription(await pc.createAnswer());
     await this._waitIce(pc, 4500);
-    return await this._pack({ t: 'answer', sdp: pc.localDescription.sdp });
+    return await this._pack({ t: 'answer', sdp: pc.localDescription.sdp, id: info.id || '' });
   },
   manualReset() {
     try { (this._man || []).forEach((x) => { try { x.pc.close(); } catch (e) {} }); } catch (e) {}
