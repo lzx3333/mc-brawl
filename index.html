@@ -323,10 +323,14 @@ body.layout-editing .screen{z-index:20!important}
 .relay-room .rr-num{color:#8ab5aa;font-weight:600}
 .relay-room .rr-go{color:#7ff7e8;font-weight:800}
 .relay-room-empty{color:#8ab5aa;font:600 12px/1.6 system-ui,sans-serif;padding:4px 2px}
+
+/* 联机延迟指示 */
+.net-rtt{position:fixed;top:8px;right:10px;z-index:60;padding:3px 8px;border-radius:4px;background:rgba(4,20,16,.72);color:#9ff3d4;font:700 11px/1.4 ui-monospace,monospace;letter-spacing:.5px;pointer-events:none}
 </style>
 </head>
 <body class="one">
 <canvas id="game"></canvas>
+<div id="netRtt" class="net-rtt hidden"></div>
 
 <div id="topbtns" class="hidden">
   <div class="icobtn" id="btnSound" title="音效">音</div>
@@ -337,7 +341,7 @@ body.layout-editing .screen{z-index:20!important}
   <div class="logo">
     <div class="kicker">Minecraft · Item Brawl</div>
     <h1>物品<b>大乱斗</b></h1>
-    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v50 自动直连（TURN）</div>
+    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v52 内置中转配置</div>
   </div>
   <div class="menu-btns">
     <button class="btn primary" data-mode="1">单人挑战</button>
@@ -4020,21 +4024,22 @@ const Net = {
     for (const c of this.conns) if (c.slot === i) return true;
     return false;
   },
+  DEFAULT_TURN: { url: 'turn:8.156.36.166:3478', user: 'mcgame', pass: '3Yw9JV5m3qWtOn' },
   iceConfig() {
     const servers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' }
     ];
-    try {
-      const c = JSON.parse(localStorage.getItem('mcbrawl_turn') || 'null');
-      if (c && c.url) {
-        const list = String(c.url).split(/[\s,]+/).filter(Boolean);
-        const s = { urls: list.length > 1 ? list : list[0] };
-        if (c.user) s.username = c.user;
-        if (c.pass) s.credential = c.pass;
-        servers.push(s);
-      }
-    } catch (e) {}
+    let turn = null;
+    try { turn = JSON.parse(localStorage.getItem('mcbrawl_turn') || 'null'); } catch (e) { turn = null; }
+    if (!turn || !turn.url) turn = this.DEFAULT_TURN;
+    if (turn && turn.url) {
+      const list = String(turn.url).split(/[\s,]+/).filter(Boolean);
+      const s = { urls: list.length > 1 ? list : list[0] };
+      if (turn.user) s.username = turn.user;
+      if (turn.pass) s.credential = turn.pass;
+      servers.push(s);
+    }
     return { iceServers: servers };
   },
   saveTurn(url, user, pass) {
@@ -4044,7 +4049,21 @@ const Net = {
     } catch (e) {}
   },
   loadTurn() {
-    try { return JSON.parse(localStorage.getItem('mcbrawl_turn') || 'null'); } catch (e) { return null; }
+    try {
+      const c = JSON.parse(localStorage.getItem('mcbrawl_turn') || 'null');
+      if (c && c.url) return c;
+    } catch (e) {}
+    return this.DEFAULT_TURN || null;
+  },
+  netDiagText() {
+    let ls = false;
+    try { localStorage.setItem('mcbrawl_probe', '1'); localStorage.removeItem('mcbrawl_probe'); ls = true; } catch (e) { ls = false; }
+    const turn = this.loadTurn();
+    const parts = [];
+    parts.push('中转服务器：' + (turn && turn.url ? '已配置' : '未配置'));
+    if (!ls) parts.push('本页无法保存设置（本地文件打开）');
+    if (typeof RTCPeerConnection === 'undefined') parts.push('浏览器不支持直连');
+    return parts.join(' · ');
   },
   status(msg) {
     const a = document.getElementById('netHostStatus');
@@ -4126,8 +4145,8 @@ const Net = {
       if (!d) return;
       const slot = conn.slot;
       this.lastRecv = Date.now();
-      if (d.t === 'ping') { try { conn.send({ t: 'pong' }); } catch (e) {} return; }
-      if (d.t === 'pong') { return; }
+      if (d.t === 'ping') { try { conn.send({ t: 'pong', ts: d.ts || 0 }); } catch (e) {} return; }
+      if (d.t === 'pong') { if (d.ts) this.rtt = Date.now() - d.ts; return; }
       if (d.t === 'hello') { this.sendLobby(); return; }
       if (d.t === 'input') {
         this.remoteCtrls[slot] = {
@@ -4222,8 +4241,8 @@ const Net = {
   },
   onData(d) {
     this.lastRecv = Date.now();
-    if (d && d.t === 'ping') { const c = this.conns[0]; try { if (c) c.send({ t: 'pong' }); } catch (e) {} return; }
-    if (d && d.t === 'pong') return;
+    if (d && d.t === 'ping') { const c = this.conns[0]; try { if (c) c.send({ t: 'pong', ts: d.ts || 0 }); } catch (e) {} return; }
+    if (d && d.t === 'pong') { if (d.ts) this.rtt = Date.now() - d.ts; return; }
     if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { return; } }
     if (!d) return;
     if (d.t === 'start') this.guestStart(d);
@@ -4318,7 +4337,7 @@ const Net = {
     const conn = this.conns[0];
     if (!conn || !conn.open) return;
     const now = performance.now();
-    if (now - this.lastInput < 33) return;
+    if (now - this.lastInput < (this._direct ? 20 : 33)) return;
     this.lastInput = now;
     try { conn.send({ t: 'input', mx: ctrl.mx, my: ctrl.my, attack: !!ctrl.attack, skill: !!ctrl.skill }); } catch (e) {}
   },
@@ -4348,6 +4367,7 @@ const Net = {
     let str = '';
     try {
       const snap = this.snapData();
+      if (!this._direct) { snap.parts = []; snap.pops = []; }
       const seen = new WeakSet();
       const replacer = function (key, val) {
         if (val && typeof val === 'object') {
@@ -4652,13 +4672,14 @@ const Net = {
     const self = this;
     dc.onopen = () => {
       conn._dc = dc;
+      this._direct = true;
       if (conn._wrtcState !== 'on') {
         conn._wrtcState = 'on';
         this.relaySay('已切到直连通道（低延迟）');
         if (typeof Lobby !== 'undefined') { try { Lobby.notice('直连已建立，操作会更跟手'); } catch (e) {} }
       }
     };
-    dc.onclose = () => { conn._dc = null; conn._wrtcState = 'off'; this.relaySay('直连断了，自动切回中转'); };
+    dc.onclose = () => { conn._dc = null; conn._wrtcState = 'off'; this._direct = false; this.relaySay('直连断了，自动切回中转'); };
     dc.onmessage = (e) => {
       let d = e.data;
       if (typeof d === 'string') { try { d = JSON.parse(d); } catch (err) { return; } }
@@ -4771,6 +4792,7 @@ const Net = {
     if (typeof Lobby !== 'undefined') {
       Lobby.open(this);
       Lobby.notice('把房间码 ' + this.code + ' 发给朋友，他在「跨网联机」里输入就能进');
+      setTimeout(() => { try { Lobby.notice(this.netDiagText()); } catch (e) {} }, 1200);
     }
     return true;
   },
@@ -4891,6 +4913,7 @@ const Net = {
     this.relaySay('正在连接中转服务器…（首次约 3 秒）');
     try { await this._relayConn2(); } catch (e) { this.relaySay('中转服务器连不上：' + e.message); this._relayMode = false; return false; }
     this._relayJoinCore(cd);
+    setTimeout(() => { try { if (typeof Lobby !== 'undefined') Lobby.notice(this.netDiagText()); } catch (e) {} }, 1500);
     return true;
   },
   _relayIn(p) {
@@ -4960,7 +4983,7 @@ const Net = {
     if (typeof setInterval !== 'function') return;
     this._hb = setInterval(() => {
       try {
-        this.conns.forEach((c) => { try { if (c && c.open) c.send({ t: 'ping' }); } catch (e) {} });
+        this.conns.forEach((c) => { try { if (c && c.open) c.send({ t: 'ping', ts: Date.now() }); } catch (e) {} });
         if (this.role === 'guest' && this._relayMode && this.lobby && this._myIdxKnown) {
           const me = this.lobby.slots[this.myIdx];
           if (me && this.conns[0] && this.conns[0].open) {
@@ -6869,6 +6892,14 @@ function updateTouchUI() {
 /* ---------- loop ---------- */
 let lastT = performance.now();
 let acc = 0;
+function updateRttHud() {
+  const el = document.getElementById('netRtt');
+  if (!el) return;
+  const on = !!(Net.role && G.state === 'fight');
+  el.classList.toggle('hidden', !on);
+  if (!on) return;
+  el.textContent = (Net.rtt ? Net.rtt + 'ms' : '--ms') + ' · ' + (Net._direct ? '直连' : '中转');
+}
 function loop(now) {
   let dt = (now - lastT) / 1000;
   lastT = now;
@@ -6877,10 +6908,11 @@ function loop(now) {
     const gf = G.fighters && (G.fighters[Net.myIdx] || G.fighters[1]);
     if (gf) { readHumanControl(0, gf); Net.sendInput(gf.ctrl); }
     for (const f of G.fighters) {
-      if (f.tx !== undefined) { f.x += (f.tx - f.x) * 0.4; f.y += (f.ty - f.y) * 0.4; }
+      if (f.tx !== undefined) { const k = (Net.myIdx && f.idx === Net.myIdx) ? 1 : 0.4; f.x += (f.tx - f.x) * k; f.y += (f.ty - f.y) * k; }
     }
     Key.pressed.clear();
     try { render(); } catch (e) { console.error('render error', e); }
+    updateRttHud();
     requestAnimationFrame(loop);
     return;
   }
@@ -6892,7 +6924,8 @@ function loop(now) {
   }
   Key.pressed.clear();
   try { render(); } catch (e) { console.error('render error', e); }
-  if (Net.role === 'host' && Net.conns.length && G.state === 'fight' && now - Net.lastSnap > 80) {
+  updateRttHud();
+  if (Net.role === 'host' && Net.conns.length && G.state === 'fight' && now - Net.lastSnap > (Net._direct ? 45 : 80)) {
     Net.lastSnap = now;
     Net.sendSnap();
   }
