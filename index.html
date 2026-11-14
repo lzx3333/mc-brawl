@@ -355,7 +355,7 @@ body.layout-editing .screen{z-index:20!important}
   <div class="logo">
     <div class="kicker">Minecraft · Item Brawl</div>
     <h1>物品<b>大乱斗</b></h1>
-    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v56 修复客人画面卡死</div>
+    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v57 卡顿诊断增强</div>
   </div>
   <div class="menu-btns">
     <button class="btn primary" data-mode="1">单人挑战</button>
@@ -4161,6 +4161,8 @@ const Net = {
         this.lobby.slots[slot].weapon = d.weapon;
         this.lobby.slots[slot].ready = false;
         this.sendLobby();
+      } else if (d.t === 'resync') {
+        try { this.sendSnap(); } catch (e) {}
       } else if (d.t === 'sync' && this.lobby && this.lobby.slots[slot]) {
         const sl2 = this.lobby.slots[slot];
         let ch = false;
@@ -4242,6 +4244,9 @@ const Net = {
     });
     this.peer.on('error', (e) => this.status('连接失败：' + (e.type || e.message || '网络错误')));
   },
+  _onDataSafe(d) {
+    try { this.onData(d); } catch (e) { this._lastErr = (e && e.message) || String(e); try { console.error('onData', e); } catch (e2) {} }
+  },
   onData(d) {
     this.lastRecv = Date.now();
     if (d && d.t === 'ping') { const c = this.conns[0]; try { if (c) c.send({ t: 'pong', ts: d.ts || 0 }); } catch (e) {} return; }
@@ -4249,7 +4254,7 @@ const Net = {
     if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { return; } }
     if (!d) return;
     if (d.t === 'start') this.guestStart(d);
-    else if (d.t === 'snap') this.applySnap(d.snap);
+    else if (d.t === 'snap') { this.lastSnapRecv = Date.now(); this.applySnap(d.snap); }
     else if (d.t === 'lobby') {
       this.lobby = d.lobby;
       this.myIdx = d.you || 1;
@@ -4662,7 +4667,11 @@ const Net = {
         if (side === 'host') { d._t = conn.slot; d._to = conn._cid || ''; } else { d._c = self.clientId; }
         const txt = JSON.stringify(d);
         if (conn._dc && conn._dc.readyState === 'open') {
-          try { conn._dc.send(txt); return; } catch (e) { conn._dc = null; }
+          try {
+            if (d.t === 'snap' && conn._dc.bufferedAmount > 64000) { self._dropped = (self._dropped || 0) + 1; return; }
+            conn._dc.send(txt);
+            return;
+          } catch (e) { conn._dc = null; conn._wrtcState = 'off'; self._direct = false; }
         }
         self._relayPub(txt);
       },
@@ -4927,7 +4936,7 @@ const Net = {
     const conn = this._relayConn('guest');
     this.conns = [conn];
     // 数据通道收到的消息要喂给游戏逻辑（之前漏了，导致客人画面不动）
-    conn.on('data', (d) => { this.lastRecv = Date.now(); this.onData(d); });
+    conn.on('data', (d) => { this.lastRecv = Date.now(); this._onDataSafe(d); });
     conn.on('close', () => this.relaySay('和房主的连接断了'));
     this.startHeartbeat();
     this.relaySay('正在找房主…');
@@ -4967,7 +4976,7 @@ const Net = {
       if (d._to && this.clientId && d._to !== this.clientId) return;
       if (d.t === 'wrtc-o') { this._wrtcFromOffer(this.conns[0], d.sdp, d.turn); return; }
       if (d.t === 'wrtc-a') return;
-      this.onData(d);
+      this._onDataSafe(d);
     }
   },
   _relayHello() {
@@ -5017,6 +5026,9 @@ const Net = {
           if (me && this.conns[0] && this.conns[0].open) {
             try { this.conns[0].send({ t: 'sync', weapon: this._myWeapon || null, ready: !!this._myReady }); } catch (e) {}
           }
+        }
+        if (this.role === 'guest' && this._relayMode && G.state === 'fight' && this.lastSnapRecv && Date.now() - this.lastSnapRecv > 3000) {
+          if (this.conns[0] && this.conns[0].open) { try { this.conns[0].send({ t: 'resync' }); } catch (e) {} }
         }
         const gap = Date.now() - (this.lastRecv || 0);
         const bad = gap > 6000;
@@ -6936,7 +6948,11 @@ function updateRttHud() {
   try { const t = Net.loadTurn(); turnOk = !!(t && t.url); } catch (e) {}
   const shown = (Net._direct && Net.wrtcRtt) ? Net.wrtcRtt : Net.rtt;
   const kind = Net._direct ? ('直连' + (Net.wrtcKind ? '(' + Net.wrtcKind + ')' : '')) : '中转';
-  el.textContent = (shown ? shown + 'ms' : '--ms') + ' · ' + kind + (fpsShow ? ' · ' + fpsShow + 'fps' : '') + ' · TURN' + (turnOk ? '✓' : '✗');
+  let flag = '';
+  if (Net._lastErr) flag = ' · ERR';
+  else if (Net.role === 'guest' && G.state === 'fight' && Net.lastSnapRecv && Date.now() - Net.lastSnapRecv > 2000) flag = ' · 等房主';
+  const drop = Net._dropped ? ' · 丢' + Net._dropped : '';
+  el.textContent = (shown ? shown + 'ms' : '--ms') + ' · ' + kind + (fpsShow ? ' · ' + fpsShow + 'fps' : '') + ' · TURN' + (turnOk ? '✓' : '✗') + flag + drop;
 }
 function loop(now) {
   let dt = (now - lastT) / 1000;
