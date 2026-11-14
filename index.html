@@ -299,6 +299,10 @@ body.layout-editing .screen{z-index:20!important}
 .man-code{width:100%;height:74px;margin-top:8px;padding:8px;background:#081a16;color:#dffcf1;border:1px solid rgba(120,200,180,.3);border-radius:4px;font:600 11px/1.5 ui-monospace,monospace;resize:vertical;word-break:break-all}
 .man-sep{height:1px;background:rgba(120,200,180,.2);margin:14px 0 4px}
 #netManualBox .net-status{text-align:left}
+
+.diag-out{margin-top:8px;padding:8px;background:rgba(4,14,12,.9);border:1px solid rgba(120,200,180,.25);border-radius:4px;color:#cdeee2;font:600 11px/1.6 ui-monospace,monospace;white-space:pre-wrap;max-height:220px;overflow:auto}
+
+.err-bar{position:fixed;left:0;right:0;top:0;z-index:9999;background:#7a1f1f;color:#ffe9e9;padding:8px 12px;font:700 11px/1.5 ui-monospace,monospace;white-space:pre-wrap}
 </style>
 </head>
 <body class="one">
@@ -313,7 +317,7 @@ body.layout-editing .screen{z-index:20!important}
   <div class="logo">
     <div class="kicker">Minecraft · Item Brawl</div>
     <h1>物品<b>大乱斗</b></h1>
-    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v40 联机增强</div>
+    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v43 错误可见</div>
   </div>
   <div class="menu-btns">
     <button class="btn primary" data-mode="1">单人挑战</button>
@@ -431,6 +435,7 @@ body.layout-editing .screen{z-index:20!important}
   </div>
 </div>
 
+<div id="errBar" class="err-bar hidden"></div>
 <div id="netModal" class="modal hidden">
   <div class="panel net-panel">
     <h2>远程联机</h2>
@@ -441,6 +446,8 @@ body.layout-editing .screen{z-index:20!important}
       <input id="turnUser" placeholder="TURN 用户名" autocomplete="off">
       <input id="turnPass" placeholder="TURN 密码" autocomplete="off">
       <button id="turnFree" class="btn" style="width:100%;margin-top:6px">一键填入公共免费 TURN（Open Relay）</button>
+      <button id="netDiag" class="btn" style="width:100%;margin-top:6px">联机自检（推荐先点这个）</button>
+      <pre id="diagOut" class="diag-out hidden"></pre>
       <button id="turnSave" class="btn" style="width:100%;margin-top:6px">保存 TURN 配置</button>
       <div id="turnStatus" class="net-status">不同网络（一个 WiFi 一个流量）连不上时，填一个 TURN 服务器即可中转。</div>
     </details>
@@ -459,7 +466,8 @@ body.layout-editing .screen{z-index:20!important}
     <div id="netJoinBox" class="hidden">
       <input id="netJoinCode" maxlength="5" placeholder="输入 5 位房间码" autocomplete="off">
       <button id="netJoin" class="btn primary" style="width:100%;margin-top:8px">加入房间</button>
-      <button id="netScan" class="btn" style="width:100%;margin-top:8px">搜索附近房间</button>
+      <button id="netScan" class="btn hidden" style="width:100%;margin-top:8px">搜索附近房间</button>
+      <div class="net-status">房间码联机依赖 PeerJS 公共服务器，连不上时请用上方「手动联机」。</div>
       <div id="roomList" class="room-list"></div>
       <div id="netJoinStatus" class="net-status"></div>
     </div>
@@ -4231,6 +4239,47 @@ const Net = {
   },
   /* ============ 手动联机：不依赖任何信令服务器，靠复制粘贴 SDP ============ */
   manualSupported() { return typeof RTCPeerConnection !== 'undefined'; },
+  async selfTest(say) {
+    const lines = [];
+    const add = (t) => { lines.push(t); try { if (say) say(lines.slice()); } catch (e) {} };
+    add('WebRTC：' + (typeof RTCPeerConnection !== 'undefined' ? '支持' : '不支持'));
+    add('网络：' + (navigator.onLine ? '在线' : '离线'));
+    const turn = this.loadTurn();
+    add('TURN：' + (turn && turn.url ? turn.url : '（未配置）'));
+    if (typeof RTCPeerConnection !== 'undefined') {
+      const types = { host: 0, srflx: 0, relay: 0, prflx: 0 };
+      let pc = null;
+      try {
+        pc = new RTCPeerConnection(this.iceConfig());
+        pc.createDataChannel('probe');
+        pc.onicecandidate = (e) => {
+          if (!e.candidate) return;
+          const m = /typ (host|srflx|relay|prflx)/.exec(e.candidate.candidate);
+          if (m && types[m[1]] != null) types[m[1]]++;
+        };
+        await pc.setLocalDescription(await pc.createOffer());
+        await this._waitIce(pc, 6000);
+        add('候选：局域网 ' + types.host + ' · 公网映射 ' + types.srflx + ' · 中转 ' + types.relay);
+        if (!types.relay) add('⚠ 没有中转候选：TURN 没生效（跨网大概率连不上）');
+      } catch (e) { add('收集失败：' + e.message); }
+      finally { try { if (pc) pc.close(); } catch (e) {} }
+    }
+    try {
+      const ok = await new Promise((res) => {
+        let done = false;
+        const fin = (v) => { if (!done) { done = true; res(v); } };
+        try {
+          const ws = new WebSocket('wss://0.peerjs.com:443/peerjs?key=peerjs&id=probe' + Date.now() + '&token=x');
+          ws.onopen = () => { fin(true); try { ws.close(); } catch (e) {} };
+          ws.onerror = () => fin(false);
+          ws.onclose = () => fin(false);
+        } catch (e) { fin(false); }
+        setTimeout(() => fin(false), 7000);
+      });
+      add('PeerJS 信令服务器：' + (ok ? '可连接（房间码联机可用）' : '连不上（房间码联机必然失败，请用手动联机）'));
+    } catch (e) { add('信令测试失败：' + e.message); }
+    return lines;
+  },
   async _pack(obj) {
     const bytes = new TextEncoder().encode(JSON.stringify(obj));
     let out = bytes;
@@ -4242,10 +4291,13 @@ const Net = {
     }
     let bin = '';
     for (let i = 0; i < out.length; i++) bin += String.fromCharCode(out[i]);
-    return btoa(bin);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   },
   async _unpack(str) {
-    const bin = atob(String(str || '').replace(/\s+/g, ''));
+    if (String(str || '').length > 40000) throw new Error('连接码太长，可能混进了别的内容');
+    let raw = String(str || '').replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    while (raw.length % 4) raw += '=';
+    const bin = atob(raw);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     let txt;
@@ -4312,7 +4364,7 @@ const Net = {
     this._manPending = { pc: pc, dc: dc };
     this._manConn(dc, 'host');
     await pc.setLocalDescription(await pc.createOffer());
-    await this._waitIce(pc, 2500);
+    await this._waitIce(pc, 4500);
     return await this._pack({ t: 'offer', sdp: pc.localDescription.sdp, kind: this.kind });
   },
   async manualAccept(codeStr) {
@@ -4338,7 +4390,7 @@ const Net = {
     pc.ondatachannel = (e) => this._manConn(e.channel, 'guest');
     await pc.setRemoteDescription({ type: 'offer', sdp: info.sdp });
     await pc.setLocalDescription(await pc.createAnswer());
-    await this._waitIce(pc, 2500);
+    await this._waitIce(pc, 4500);
     return await this._pack({ t: 'answer', sdp: pc.localDescription.sdp });
   },
   manualReset() {
@@ -6446,8 +6498,12 @@ function bindUI() {
     try {
       const v = manAnswerIn ? manAnswerIn.value : '';
       if (!v) { manSay('先把朋友的回复码粘进来'); return; }
+      manSay('正在解析回复码…');
       await Net.manualAccept(v);
-      manSay('已提交回复码，等待连接…连上后会自动进入大厅');
+      manSay('回复码已接受，正在建立连接…（最多等 25 秒）');
+      setTimeout(function () {
+        if (Net.role === 'host' && (!Net.conns || !Net.conns.length)) manSay('25 秒还没连上：多半是网络打不通（试同一 WiFi / 开热点），或回复码不完整');
+      }, 25000);
     } catch (e) { manSay('回复码无效：' + e.message); }
   });
   if (manJoinGen) manJoinGen.addEventListener('click', async function () {
@@ -6538,6 +6594,15 @@ function bindUI() {
     if (st) st.textContent = '已填入公共免费 TURN（Open Relay，可能不稳定）；新建房间/连接后生效';
     Sound.play('click', { vol: 0.4, rate: 1.1 });
   });
+  const netDiag = document.getElementById('netDiag');
+  if (netDiag) netDiag.addEventListener('click', async function () {
+    const out = document.getElementById('diagOut');
+    if (out) { out.classList.remove('hidden'); out.textContent = '检测中…（最多约 15 秒）'; }
+    Sound.play('click', { vol: 0.4, rate: 1.1 });
+    try {
+      await Net.selfTest(function (lines) { if (out) out.textContent = lines.join('\n'); });
+    } catch (e) { if (out) out.textContent = '自检失败：' + e.message; }
+  });
   const turnSave = document.getElementById('turnSave');
   if (turnSave) turnSave.addEventListener('click', function () {
     const u = ((turnUrl && turnUrl.value) || '').trim();
@@ -6553,6 +6618,23 @@ function bindUI() {
     Sound.play('click', { vol: 0.4, rate: 1.1 });
   });
   Lobby.bind();
+  window.addEventListener('error', function (ev) {
+    try {
+      const box = document.getElementById('errBar');
+      if (!box) return;
+      box.textContent = '脚本错误：' + ((ev && ev.message) || 'unknown');
+      box.classList.remove('hidden');
+    } catch (e) {}
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    try {
+      const box = document.getElementById('errBar');
+      if (!box) return;
+      const r = ev && ev.reason;
+      box.textContent = '异步错误：' + ((r && (r.message || r)) || 'unknown');
+      box.classList.remove('hidden');
+    } catch (e) {}
+  });
   window.addEventListener('resize', relayout);
   document.addEventListener('visibilitychange', function () {
     if (document.hidden && G.state === 'fight' && !G.preview) pauseGame();
