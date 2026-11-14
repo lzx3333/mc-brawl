@@ -341,7 +341,7 @@ body.layout-editing .screen{z-index:20!important}
   <div class="logo">
     <div class="kicker">Minecraft · Item Brawl</div>
     <h1>物品<b>大乱斗</b></h1>
-    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v52 内置中转配置</div>
+    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v53 联机诊断</div>
   </div>
   <div class="menu-btns">
     <button class="btn primary" data-mode="1">单人挑战</button>
@@ -6898,7 +6898,9 @@ function updateRttHud() {
   const on = !!(Net.role && G.state === 'fight');
   el.classList.toggle('hidden', !on);
   if (!on) return;
-  el.textContent = (Net.rtt ? Net.rtt + 'ms' : '--ms') + ' · ' + (Net._direct ? '直连' : '中转');
+  let turnOk = false;
+  try { const t = Net.loadTurn(); turnOk = !!(t && t.url); } catch (e) {}
+  el.textContent = (Net.rtt ? Net.rtt + 'ms' : '--ms') + ' · ' + (Net._direct ? '直连' : '中转') + ' · TURN' + (turnOk ? '✓' : '✗');
 }
 function loop(now) {
   let dt = (now - lastT) / 1000;
