@@ -317,7 +317,7 @@ body.layout-editing .screen{z-index:20!important}
   <div class="logo">
     <div class="kicker">Minecraft · Item Brawl</div>
     <h1>物品<b>大乱斗</b></h1>
-    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v44 串码修复</div>
+    <div class="sub">碰壁反弹 · 蓄力出击 · 技能对决 · v46 联机同步修复</div>
   </div>
   <div class="menu-btns">
     <button class="btn primary" data-mode="1">单人挑战</button>
@@ -3933,6 +3933,7 @@ const Net = {
     this.conns.push(conn);
     this.remoteCtrls[idx] = { mx: 0, my: 0, attack: false, skill: false };
     const onOpen = () => {
+      this.startHeartbeat();
       this.status('玩家已连接（' + this.conns.length + '）');
       if (this._manualMode && typeof Lobby !== 'undefined') Lobby.open(this);
       if (this.lobby) {
@@ -3948,12 +3949,16 @@ const Net = {
     conn.on('data', (d) => {
       if (!d) return;
       const slot = conn.slot;
+      this.lastRecv = Date.now();
+      if (d.t === 'ping') { try { conn.send({ t: 'pong' }); } catch (e) {} return; }
+      if (d.t === 'pong') { return; }
       if (d.t === 'input') {
         this.remoteCtrls[slot] = {
           mx: clamp(+d.mx || 0, -1, 1), my: clamp(+d.my || 0, -1, 1),
           attack: !!d.attack, skill: !!d.skill
         };
       } else if (d.t === 'pick' && this.lobby && this.lobby.slots[slot]) {
+        this.status('玩家 ' + (slot + 1) + ' 选了 ' + (d.weapon || ''));
         this.lobby.slots[slot].weapon = d.weapon;
         this.lobby.slots[slot].ready = false;
         this.sendLobby();
@@ -4025,7 +4030,7 @@ const Net = {
       const conn = this.peer.connect('mcbrawl-' + this.code, { reliable: true });
       setTimeout(() => { if (conn && !conn.open) this.status('连接超时：确认房主还在等待；或点「搜索附近房间」直接选房'); }, 10000);
       this.conns = [conn];
-      conn.on('open', () => { this.status('已连接'); try { conn.send({ t: 'hello' }); } catch (e) {} });
+      conn.on('open', () => { this.startHeartbeat(); this.status('已连接'); try { conn.send({ t: 'hello' }); } catch (e) {} });
       conn.on('data', (d) => this.onData(d));
       conn.on('close', () => this.status('房主已断开'));
       conn.on('error', () => this.status('连接失败'));
@@ -4033,6 +4038,9 @@ const Net = {
     this.peer.on('error', (e) => this.status('连接失败：' + (e.type || e.message || '网络错误')));
   },
   onData(d) {
+    this.lastRecv = Date.now();
+    if (d && d.t === 'ping') { const c = this.conns[0]; try { if (c) c.send({ t: 'pong' }); } catch (e) {} return; }
+    if (d && d.t === 'pong') return;
     if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { return; } }
     if (!d) return;
     if (d.t === 'start') this.guestStart(d);
@@ -4335,11 +4343,12 @@ const Net = {
       if (typeof d === 'string') { try { d = JSON.parse(d); } catch (err) {} }
       conn.emit('data', d);
     };
+    if (dc.readyState === 'open') { conn.open = true; setTimeout(() => { try { conn.emit('open'); } catch (e) {} }, 0); }
     if (side === 'host') {
       this.hostConn(conn);
     } else {
       this.conns = [conn];
-      conn.on('open', () => { this.status('已连接'); try { conn.send({ t: 'hello' }); } catch (e) {} });
+      conn.on('open', () => { this.startHeartbeat(); this.status('已连接'); try { conn.send({ t: 'hello' }); } catch (e) {} });
       conn.on('data', (d) => this.onData(d));
       conn.on('close', () => this.status('房主已断开'));
     }
@@ -4381,15 +4390,18 @@ const Net = {
     const hit = list.filter((x) => info.id && x.id === info.id)[0];
     if (hit) order.push(hit);
     list.slice().reverse().forEach((x) => { if (x !== hit) order.push(x); });
-    let lastErr = null;
+    let lastErr = null, skipped = 0;
     for (const it of order) {
+      if (it.done || it.pc.signalingState !== 'have-local-offer') { skipped++; continue; }
       try {
         await it.pc.setRemoteDescription({ type: 'answer', sdp: info.sdp });
+        it.done = true;
         this._manPending = { pc: it.pc, dc: it.dc, id: it.id };
         this.status('回复码已提交，等待连接…');
         return true;
       } catch (e) { lastErr = e; }
     }
+    if (skipped && !lastErr) { this.status('这条回复码已经提交过了，正在等待连接…'); return true; }
     throw new Error('回复码和当前连接码对不上（offer m=' + (this._lastOfferM || '?') + '，本条 id=' + (info.id || '无') + '，本机 id=' + list.map(function(x){return x.id;}).join(',') + '）：' + (lastErr && lastErr.message ? lastErr.message : '未知'));
   },
   async manualAnswer(codeStr) {
@@ -4414,6 +4426,30 @@ const Net = {
     this._man = []; this._manPending = null;
     this.disconnect(false);
   },
+  startHeartbeat() {
+    if (this._hb) return;
+    this.lastRecv = Date.now();
+    this._hbWarn = false;
+    if (typeof setInterval !== 'function') return;
+    this._hb = setInterval(() => {
+      try {
+        this.conns.forEach((c) => { try { if (c && c.open) c.send({ t: 'ping' }); } catch (e) {} });
+        const gap = Date.now() - (this.lastRecv || 0);
+        const bad = gap > 6000;
+        if (bad && !this._hbWarn) {
+          this._hbWarn = true;
+          const msg = this.role === 'guest' ? '房主网络波动，连接可能卡住…' : '有玩家网络波动，等待重连…';
+          if (typeof Lobby !== 'undefined' && this.lobby && !document.getElementById('lobby').classList.contains('hidden')) Lobby.notice(msg);
+          this.status(msg);
+        } else if (!bad && this._hbWarn) {
+          this._hbWarn = false;
+          if (typeof Lobby !== 'undefined') Lobby.notice('连接恢复');
+          this.status('连接正常');
+        }
+      } catch (e) {}
+    }, 2000);
+  },
+  stopHeartbeat() { try { if (this._hb && typeof clearInterval === 'function') clearInterval(this._hb); } catch (e) {} this._hb = null; },
   disconnect(show) {
     try { this.conns.forEach((c) => c.close()); } catch (e) {}
     try { if (this.peer) this.peer.destroy(); } catch (e) {}
@@ -4421,6 +4457,7 @@ const Net = {
     this._man = []; this._manPending = null;
     this.conns = []; this.peer = null; this.role = null; this.ffa = false; this.remoteCtrls = [];
     this._manualMode = false;
+    this.stopHeartbeat();
     if (show !== false) this.status('已断开');
   }
 };
@@ -4659,6 +4696,10 @@ const Lobby = {
         }
         this.net.moveSlot(sl.idx, to);
         this.notice('已交换位置，队伍已同步到所有玩家');
+        return;
+      }
+      if (!sl.ai && sl.idx !== 0 && sl.joined) {
+        this.notice('「' + sl.name + '」是真人玩家，由他自己选武器和准备');
         return;
       }
       const tog = e.target.closest('.slot-toggle');
@@ -6515,11 +6556,16 @@ function bindUI() {
       const v = manAnswerIn ? manAnswerIn.value : '';
       if (!v) { manSay('先把朋友的回复码粘进来'); return; }
       manSay('正在解析回复码…');
-      await Net.manualAccept(v);
-      manSay('回复码已接受，正在建立连接…（最多等 25 秒）');
+      if (manHostFinish) manHostFinish.disabled = true;
+      const accepted = await Net.manualAccept(v);
+      manSay(accepted ? '回复码已接受，正在建立连接…（最多等 25 秒）' : '回复码没用上，请重新生成连接码');
+      if (!accepted && manHostFinish) manHostFinish.disabled = false;
       setTimeout(function () {
         if (Net.role === 'host' && (!Net.conns || !Net.conns.length)) manSay('25 秒还没连上：多半是网络打不通（试同一 WiFi / 开热点），或回复码不完整');
       }, 25000);
+      setTimeout(function () {
+        if (Net.role === 'host' && (!Net.conns || !Net.conns.length) && manHostFinish) manHostFinish.disabled = false;
+      }, 26000);
     } catch (e) { manSay('回复码无效：' + e.message); }
   });
   if (manJoinGen) manJoinGen.addEventListener('click', async function () {
